@@ -729,29 +729,7 @@ verse_data_query = USFM_LANGUAGE.query('''(v (verseNumber) @verse-number)
                                             (vp (text) @vp-text)
                                             (va (verseNumber) @va-number)''')
 
-######### Old queries ############
-
-bookcode_query = USFM_LANGUAGE.query('''(File (book (id (bookcode) @book-code)))''')
-
-chapter_query = USFM_LANGUAGE.query('''(File (chapter) @chapter)''')
-
-chapternum_query = USFM_LANGUAGE.query('''(c (chapterNumber) @chapter-number)''')
-
-versenum_query = USFM_LANGUAGE.query("""(v (verseNumber) @verse)""")
-
-versetext_query = USFM_LANGUAGE.query("""(verseText) @verse-text""")
-
-text_query = USFM_LANGUAGE.query("""(text) @text""")
-
 error_query = USFM_LANGUAGE.query("""(ERROR) @errors""")
-
-notes_query = USFM_LANGUAGE.query('''[(footnote) (crossref)] @note''')
-
-notestext_query = USFM_LANGUAGE.query('''(noteText) @note-text''')
-
-para_query = USFM_LANGUAGE.query("""[(paragraph) (poetry) (table) (list)] @para""")
-
-title_query = USFM_LANGUAGE.query("""(title) @title""")
 
 class USFMParser():
     """Parser class with usfmstring, syntax_tree and methods for JSON convertions"""
