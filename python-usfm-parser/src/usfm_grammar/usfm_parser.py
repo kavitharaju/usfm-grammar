@@ -67,9 +67,13 @@ TABLE_CELL_MARKERS = ["tc", "th", "tcr", "thr"]
 MISC_MARKERS = ["fig", "cat", "esb", "b", "ph", "pi"]
 
 # Handled alike by the node_2_dict_generic method
+# ANY_VALID_MARKER = PARA_STYLE_MARKERS+NOTE_MARKERS+CHAR_STYLE_MARKERS+\
+#                     NESTED_CHAR_STYLE_MARKERS+TABLE_CELL_MARKERS+\
+#                     MISC_MARKERS
+
 ANY_VALID_MARKER = PARA_STYLE_MARKERS+NOTE_MARKERS+CHAR_STYLE_MARKERS+\
-                    NESTED_CHAR_STYLE_MARKERS+TABLE_CELL_MARKERS+\
-                    MISC_MARKERS
+                    NESTED_CHAR_STYLE_MARKERS+TABLE_CELL_MARKERS+ ["tr"]+\
+                    PARAGRAPH_MARKERS+MISC_MARKERS
 
 def node_2_usx_id(node, usfm_bytes,parent_xml_node):
     '''build id node in USX'''
@@ -444,54 +448,79 @@ def reduce_nesting(nested_json): # pylint: disable=too-many-nested-blocks, too-m
         return None
     return result
 
+def node_2_dict_id(book_node, usfm_bytes):
+    '''Extract bookcode and desc of id marker'''
+    result = {
+            "tag":"id",
+            "cat":"book",
+            }
+    id_caps = id_query.captures(book_node)
+    for cap in id_caps:
+        match cap:
+            case (in_node, "book-code"):
+                result['bookCode'] = usfm_bytes[\
+                    in_node.start_byte:in_node.end_byte].decode('utf-8').strip()
+                result['value'] = result['bookCode']
+            case (in_node, "desc"):
+                val = usfm_bytes[\
+                    in_node.start_byte:in_node.end_byte].decode('utf-8').strip()
+                if val != "":
+                    result['description'] = val
+                    result['value'] += " "+ val
+    return result
 
-def node_2_dict_chapter(chapter_node, usfm_bytes, filters):
+
+def node_2_dict_chapter(chapter_node, usfm_bytes, current_ref):
     '''extract and format chapter head items'''
-    chapter_output = {}
+    chapter_output = {
+                        "tag": "c",
+                        "cat":"chapter"
+                    }
     chapter_data_cap = chapter_data_query.captures(chapter_node)
     for chap_data in chapter_data_cap:
         match chap_data:
             case (node, "chapter-number"):
-                chapter_output['c'] = usfm_bytes[\
+                chapter_output['value'] = usfm_bytes[\
                     node.start_byte:node.end_byte].decode('utf-8').strip()
-            case (node, "cl-text"):
-                chapter_output['cl'] = usfm_bytes[node.start_byte:
-                                    node.end_byte].decode('utf-8').strip()
+                current_ref[1] = chapter_output['value']
             case (node, "ca-number"):
-                chapter_output['ca'] = usfm_bytes[node.start_byte:
+                chapter_output['altNumber'] = usfm_bytes[node.start_byte:
                                     node.end_byte].decode('utf-8').strip()
             case (node, "cp-text"):
-                chapter_output['cp'] = usfm_bytes[node.start_byte:
+                chapter_output['pubNumber'] = usfm_bytes[node.start_byte:
                                     node.end_byte].decode('utf-8').strip()
-            case (node, "cd-node"):
-                inner_contents = []
-                for child in node.children:
-                    processed = node_2_dict(child, usfm_bytes, filters)
-                    if processed:
-                        inner_contents.append(processed)
-                if len(inner_contents) == 1:
-                    inner_contents = inner_contents[0]
-                chapter_output['cd'] = inner_contents
-
+    if chapter_node.children:
+        chapter_output['children'] = []
+    for child in chapter_node.children:
+        if child.type in ["ca", "cp", "c"]:
+            pass
+        else:
+            chap_content_obj = node_2_dict3(child, usfm_bytes, current_ref)
+            # chap_content_obj['types'].append("chapter-content")
+            chapter_output['children'].append(chap_content_obj)
     return chapter_output
 
 
-def node_2_dict_verse(verse_node, usfm_bytes):
+def node_2_dict_verse(verse_node, usfm_bytes, current_ref):
     '''extract and format verse head items'''
-    result = {}
+    resp_json = {
+        "tag":"v",
+        "cat":"verse"
+        }
     verse_caps = verse_data_query.captures(verse_node)
     for v_cap in verse_caps:
         match v_cap:
             case (in_node, "verse-number"):
-                result['v'] = usfm_bytes[\
+                resp_json['value'] = usfm_bytes[\
                     in_node.start_byte:in_node.end_byte].decode('utf-8').strip()
+                current_ref[2] = resp_json['value']
             case (in_node, "va-number"):
-                result['va'] = usfm_bytes[\
+                resp_json['altNumber'] = usfm_bytes[\
                     in_node.start_byte:in_node.end_byte].decode('utf-8').strip()
             case (in_node, "vp-text"):
-                result['vp'] = usfm_bytes[\
+                resp_json['pubNumber'] = usfm_bytes[\
                     in_node.start_byte:in_node.end_byte].decode('utf-8').strip()
-    return result
+    return resp_json
 
 def node_2_dict_attrib(attrib_node, usfm_bytes, parent_type):
     '''extract and format attributes and values, also filling out default attributes'''
@@ -519,6 +548,7 @@ def node_2_dict_attrib(attrib_node, usfm_bytes, parent_type):
 
 def node_2_dict_milestone(ms_node, usfm_bytes):
     '''extract and format milestone nodes'''
+    resp_json = {"cat": "milestone"}
     attribs = []
     for child in ms_node.children:
         if child.type.endswith("Tag"):
@@ -527,23 +557,104 @@ def node_2_dict_milestone(ms_node, usfm_bytes):
             attribs.append(node_2_dict_attrib(child, usfm_bytes, ms_node.type))
     ms_name = usfm_bytes[\
             ms_name_node.start_byte:ms_name_node.end_byte].decode('utf-8').strip().replace("\\","")
-    result = {'milestone':ms_name}
+    resp_json['tag'] = ms_name
     if len(attribs) > 0:
         attrib_dict = {}
         for item in attribs:
             attrib_name = list(item)[0]
             attrib_dict[attrib_name] = item[attrib_name]
-        result['attributes'] = attrib_dict
-    return result
+        resp_json['attributes'] = attrib_dict
+    return resp_json
 
-def node_2_dict_generic(node, usfm_bytes, filters): # pylint: disable=R0912
+def node_2_dict_text(text_node, usfm_bytes, current_ref):
+    '''process verse-text and note-text nodes'''
+    resp_json = {'cat':text_node.type}
+    values = []
+    contents = []
+    for child in text_node.children:
+        if child.type == "text":
+            text = usfm_bytes[child.start_byte:child.end_byte].decode('utf-8').strip()
+            if text != "":
+                values.append(text)
+        else:
+            inner_obj = node_2_dict3(child, usfm_bytes, current_ref)
+            inner_obj['cat'] = "inline"
+            # inner_obj['types'].append("characterMarker")
+            if "children" in inner_obj:
+                for nested_obj in inner_obj['children']:
+                    nested_obj['cat'] = "inline"
+            if "value" in inner_obj:
+                values.append(inner_obj['value'])
+            contents.append(inner_obj)
+    if not values and not contents:
+        return None
+    resp_json['value'] = " ".join(values)
+    if contents:
+        resp_json['children'] = contents
+    if text_node.type == "verseText":
+        resp_json['ref'] = f"{current_ref[0]} {current_ref[1]}:{current_ref[2]}"
+    return resp_json
+
+def node_2_dict_para(node, usfm_bytes, current_ref):
+    '''To handle paragraphs, poetry, lists and tables'''
+    resp_json = {"cat":"text"}
+    # resp_json['types'].append(node.type)
+    resp_json["children"]=[]
+    for child in node.children:
+        child_obj = node_2_dict3(child, usfm_bytes, current_ref)
+        if "tag" in child_obj:
+            # p, m, pr,... lh, lf, tr etc
+            child_obj['cat'] = node.type
+            if "children" in child_obj:
+                # tc, tcr, th, thr etc
+                for inner_child in child_obj['children']:
+                    if "cat" not in inner_child or inner_child['cat'] is None:
+                        inner_child["cat"] = node.type
+            resp_json['children'].append(child_obj)
+        elif "children" in child_obj:
+            for inner_child in child_obj['children']:
+                inner_child['cat'] = node.type
+                resp_json['children'].append(inner_child)
+        else:
+            raise Exception(f"Dont know what to do with this text.child: {child_obj}")
+    return resp_json
+
+def node_2_dict_title(node, usfm_bytes, current_ref):
+    '''Converts title and children to dict'''
+    resp_json = {
+        "cat":"title", 
+        "children":[]
+        }
+    for child in node.children:
+        child_obj = node_2_dict3(child, usfm_bytes, current_ref)
+        if child_obj:
+            if "tag" in child_obj:
+                resp_json['children'].append(child_obj)
+            elif "children" in child_obj:
+                resp_json['children'] += child_obj['children']
+    for child_obj in resp_json['children']:
+        if "cat" not in child_obj or child_obj['cat'] is None:
+            child_obj['cat'] = "title"
+        if "children" in child_obj:
+            for grand_child in child_obj['children']:
+                if "cat" not in grand_child or grand_child['cat'] is None:
+                    grand_child['cat'] = "title"
+
+    return resp_json
+
+def node_2_dict_generic(node, usfm_bytes, current_ref):
     '''The general rules to cover the common marker types'''
+    resp_json = {
+        "tag":None,
+        "cat":None
+    }
     marker_name = node.type
+    if marker_name in CHAR_STYLE_MARKERS+NESTED_CHAR_STYLE_MARKERS:
+        resp_json['cat'] = "inline"
     if "Nested" in marker_name:
         marker_name = "+"+marker_name.replace("Nested", "")
     content = []
-    tag_node = None
-    closing_node = None
+    values = []
     attribs = []
     for child in node.children:
         if child.type.endswith("Tag"):
@@ -551,179 +662,93 @@ def node_2_dict_generic(node, usfm_bytes, filters): # pylint: disable=R0912
             marker_name = usfm_bytes[\
                 tag_node.start_byte:tag_node.end_byte].decode('utf-8').strip().replace("\\","")
         elif child.type in ["text", "category", "version"]:
-            content.append(usfm_bytes[\
+            values.append(usfm_bytes[\
                 child.start_byte:child.end_byte].decode('utf-8').strip())
         elif child.type.strip().startswith('\\') and child.type.strip().endswith("*"):
-            closing_node = child
+            resp_json['closing'] = True
         elif child.type.endswith("Attribute"):
-            if Filter.ATTRIBUTES in filters:
-                attribs.append(node_2_dict_attrib(child, usfm_bytes, node.type))
+            attribs.append(node_2_dict_attrib(child, usfm_bytes, node.type))
         else:
-            inner_cont = node_2_dict(child, usfm_bytes, filters)
+            inner_cont = node_2_dict3(child, usfm_bytes, current_ref)
             if inner_cont:
-                if child.type == "noteText":
-                    content += inner_cont
-                else:
-                    content.append(inner_cont)
-            # else:
-            #     print("igoring:",child)
-    processed_marker_name = re.sub(r'[+\d]+',"",marker_name)
-    if len(content) == 0:
-        content = None
-    elif processed_marker_name in NO_NESTING_MARKERS and len(content) == 1 :
-        content = content[0]
-    result = {marker_name:content}
+                if inner_cont['cat'] == "inline" and "value" in inner_cont:
+                    values.append(inner_cont['value'])
+                content.append(inner_cont)
+    resp_json['tag'] = marker_name
+    if content:
+        resp_json['children'] = content
+    if values:
+        resp_json['value'] = " ".join(values)
     if len(attribs) > 0:
         attrib_dict = {}
         for item in attribs:
             attrib_name = list(item)[0]
             attrib_dict[attrib_name] = item[attrib_name]
-        result['attributes'] = attrib_dict
-    if closing_node is not None:
-        result['closing'] = usfm_bytes[\
-            closing_node.start_byte:closing_node.end_byte].decode('utf-8').strip().replace("\\","")
-    return result
+        resp_json['attributes'] = attrib_dict
+    return resp_json
 
-def node_2_dict(node, usfm_bytes, filters): # pylint: disable=too-many-return-statements, too-many-branches, too-many-statements
-    '''recursive function converting a syntax tree node and its children to dictionary'''
-    if node.type in ANY_VALID_MARKER:
-        return node_2_dict_generic(node, usfm_bytes, filters)
+
+def node_2_dict3(node, usfm_bytes, current_ref):
+    '''Accepts a syntax tree node and returns its JSON.
+    Calls same function recursively for child nodes'''
+    resp_json = None
     if node.type == "v":
-        return node_2_dict_verse(node, usfm_bytes)
-    if node.type == 'verseText':
-        if Filter.SCRIPTURE_TEXT in filters:
-            result = {"verseText":[]}
+        resp_json = node_2_dict_verse(node, usfm_bytes, current_ref)
+    elif node.type in ["verseText", "noteText"]:
+        resp_json = node_2_dict_text(node, usfm_bytes, current_ref)
+    elif node.type in ["paragraph", "poetry","list", "table"]:
+        resp_json = node_2_dict_para(node, usfm_bytes, current_ref)
+    elif node.type.endswith("Block"):
+        resp_json = {
+            "cat":"block",
+            "children": []
+        }
+        for child in node.children:
+            child_obj = node_2_dict3(child, usfm_bytes, current_ref)
+            if child_obj:
+                resp_json['children'].append(child_obj)
+    elif node.type in ["footnote", "crossref"]:
+        resp_json = {
+            "cat": node.type,
+            "ref": f"{current_ref[0]} {current_ref[1]}:{current_ref[2]}",
+            "children":[]
+        }
+        for child in node.children:
+            child_obj = node_2_dict3(child, usfm_bytes, current_ref)
+            if child_obj:
+                if child_obj['cat'] != "noteText":
+                    child_obj['cat'] = node.type
+                resp_json['children'].append(child_obj)
+    elif node.type in ANY_VALID_MARKER:
+        resp_json = node_2_dict_generic(node, usfm_bytes, current_ref)
+    elif node.type =="title":
+        resp_json = node_2_dict_title(node, usfm_bytes, current_ref)
+    elif node.type in ['milestone', "zNameSpace"]:
+        resp_json = node_2_dict_milestone(node, usfm_bytes)
+    else:
+        if node.children:
+            resp_json = {"cat":None}
+            resp_json['children'] = []
             for child in node.children:
-                if child.type == "text":
-                    text = usfm_bytes[child.start_byte:child.end_byte].decode('utf-8')
-                    if text != "":
-                        result['verseText'].append(text)
-                else:
-                    processed = node_2_dict(child,usfm_bytes, filters)
-                    if processed:
-                        result['verseText'].append(processed)
-            return result
-    if node.type.endswith("Block"):
-        result = []
-        for child in node.children:
-            processed = node_2_dict(child,usfm_bytes, filters)
-            if processed:
-                result.append(processed)
-        return result
-    if node.type == "paragraph":
-        if node.children[0].type.endswith("Block"):
-            processed = node_2_dict(node.children[0], usfm_bytes, filters)
-            return processed
-        result = {node.children[0].type: []}
-        for child in node.children[0].children[1:]:
-            processed = node_2_dict(child,usfm_bytes, filters)
-            if processed:
-                result[node.children[0].type].append(processed)
-        if Filter.PARAGRAPHS not in filters:
-            return list(result.values())
-        return result
-    if node.type == "poetry":
-        result = {"poetry":[]}
-        for child in node.children:
-            processed = node_2_dict(child,usfm_bytes, filters)
-            if processed:
-                if isinstance(processed, list):
-                    result['poetry'] += processed
-                else:
-                    result['poetry'].append(processed)
-        if Filter.PARAGRAPHS not in filters:
-            new_result = []
-            for block in result['poetry']:
-                if isinstance(block, dict):
-                    val = list(block.values())
-                elif isinstance(block, list):
-                    val = []
-                    for item in block:
-                        val += list(item.values())
-                if val and val != [[]]:
-                    new_result += val
-            return new_result
-        return result
-    if node.type == "list":
-        result = {'list':[]}
-        for child in node.children:
-            processed = node_2_dict(child,usfm_bytes, filters)
-            if processed:
-                result['list'].append(processed)
-        if Filter.PARAGRAPHS not in filters:
-            new_result = []
-            for block in result['list']:
-                if isinstance(block, dict):
-                    val = list(block.values())
-                elif isinstance(block, list):
-                    val = []
-                    for item in block:
-                        val += list(item.values())
-                if val and val != [[]]:
-                    new_result += val
-            return new_result
-        return result
-    if node.type == "table":
-        result = {"table":[]}
-        rows = USFM_LANGUAGE.query("((tr) @row)").captures(node)
-        for row in rows:
-            cells = []
-            for child in row[0].children[1:]:
-                processed = node_2_dict(child,usfm_bytes, filters)
-                if processed:
-                    cells.append(processed)
-            result['table'].append({"tr":cells})
-        if Filter.PARAGRAPHS not in filters:
-            new_result = []
-            for row in result['table']:
-                for cell in row["tr"]:
-                    val = list(cell.values())
-                    if val and val != [[]]:
-                        new_result += val
-            return new_result
-        return result
-    if node.type in ["milestone", "zNameSpace"]:
-        if Filter.MILESTONES in filters:
-            return node_2_dict_milestone(node, usfm_bytes)
-    if node.type == "title":
-        if Filter.TITLES in filters:
-            result = []
-            for child in node.children:
-                processed = node_2_dict(child,usfm_bytes, filters)
-                if processed:
-                    result.append(processed)
-            return result
-    if node.type in ['footnote', 'crossref']:
-        if Filter.NOTES in filters:
-            return node_2_dict(node.children[0], usfm_bytes, filters)
-    if node.type == 'caller':
-        return {"caller": usfm_bytes[node.start_byte:node.end_byte].decode('utf-8').strip()}
-    if node.type == "noteText":
-        result = []
-        for child in node.children:
-            processed = node_2_dict(child,usfm_bytes, filters)
-            if processed:
-                result.append(processed)
-        return result
-    if node.type == 'text':
-        val = usfm_bytes[node.start_byte:node.end_byte].decode('utf-8').strip()
-        if val != "":
-            return val
-    return None
+                child_obj = node_2_dict3(child, usfm_bytes, current_ref)
+                if child_obj:
+                    resp_json['children'].append(child_obj)
+    return resp_json
+
+
 
 ###########^^^^^^^^^^^ Logics for syntax-tree to dict conversions ^^^^^^^^^ ##############
 
 
 
-######## Newly formed queries#############
+######## Queries#############
 
 id_query = USFM_LANGUAGE.query('''(book (id (bookcode) @book-code (description) @desc))''')
 
 chapter_data_query = USFM_LANGUAGE.query('''(c (chapterNumber) @chapter-number)
                                             (cl (text) @cl-text)
                                             (cp (text) @cp-text)
-                                            (ca (chapterNumber) @ca-number)
-                                            (cd) @cd-node''')
+                                            (ca (chapterNumber) @ca-number)''')
 
 verse_data_query = USFM_LANGUAGE.query('''(v (verseNumber) @verse-number)
                                             (vp (text) @vp-text)
@@ -777,45 +802,24 @@ class USFMParser():
             raise Exception("Errors present:"+\
                 f'\n\t{err_str}'+\
                 "\nUse ignore_errors=True, to generate output inspite of errors")
-        dict_output = {"book": {"id":{}}}
-        if filters is None or filters == []:
-            filters = list(Filter)
         try:
+            dict_output = node_2_dict_id(self.syntax_tree, self.usfm_bytes)
+            current_ref = [dict_output['bookCode'],"",""]
+            dict_output['children'] = []
             for child in self.syntax_tree.children:
-                match child.type:
-                    case "book":
-                        id_captures = id_query.captures(child)
-                        for id_cap in id_captures:
-                            match id_cap:
-                                case (node, "book-code"):
-                                    dict_output['book']['id']['bookCode'] = self.usfm_bytes[\
-                                        node.start_byte:node.end_byte].decode('utf-8').strip()
-                                case (node, "desc"):
-                                    val = self.usfm_bytes[\
-                                        node.start_byte:node.end_byte].decode('utf-8').strip()
-                                    if val != "":
-                                        dict_output['book']['id']['fileDescription'] = val
-                    case "chapter":
-                        if "chapters" not in dict_output['book']:
-                            dict_output['book']['chapters'] = []
-
-                        chapter_output = node_2_dict_chapter(child, self.usfm_bytes, filters)
-
-                        chapter_output['contents'] = []
-                        for inner_child in child.children:
-                            if inner_child.type not in ['chapterNumber','cl','ca','cp','cd','c']:
-                                processed = node_2_dict(inner_child, self.usfm_bytes, filters)
-                                if isinstance(processed, list):
-                                    chapter_output['contents'] += processed
-                                elif processed is not None:
-                                    chapter_output['contents'].append(processed)
-                        dict_output['book']['chapters'].append(chapter_output)
-                    case _:
-                        if Filter.BOOK_HEADERS in filters:
-                            if "headers" not in dict_output['book']:
-                                dict_output['book']['headers'] = []
-                            dict_output['book']['headers'].append(
-                                node_2_dict(child, self.usfm_bytes, filters))
+                if child.type == "book":
+                    pass
+                elif child.type == "chapter":
+                    chapter_obj = node_2_dict_chapter(child, self.usfm_bytes, current_ref)
+                    dict_output['children'].append(chapter_obj)
+                else:
+                    header_obj = node_2_dict3(child, self.usfm_bytes, current_ref)
+                    if header_obj['cat'] == "block":
+                        for obj in header_obj['children']:
+                            obj['cat'] = "header"
+                    else:
+                        header_obj['cat'] = "header"
+                    dict_output['children'].append(header_obj)
         except Exception as exe:
             message = "Unable to do the conversion. "
             if self.errors:
