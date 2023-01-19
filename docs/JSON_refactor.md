@@ -1,25 +1,53 @@
 
-# JSON Refactor and Schema Standardaisation for 3.x
+# USFM Grammar JSON for 3.x
 
-### Nested JSON
+We aim to preserve all the information encoded in USFM while making it user (developer)-friendly based on the following principles:
+* Use JSON.
+* Every marker is represented by a JSON object that consist of a fixed set of keys making the data predictable for users.
+* We define abstractions for categoriesing similar markers for creating an intuitive mental model of the data.
+* Explicit representation of the marker hierarchy in USFM that is, sometimes, inherent but not obvious.
 
-* All contents are warpped in a "book". Allowing us to use the same format for multiple books if needed.
-* "book.headers" group all markers from id to chapter. This becomes an outer gruping for the actual USFM's (and Grammar's) grouping of Identification, BookIntroduction and BookHeaders etc which are not named as such in the JSON.
-* There is an outer "chapters" arrays wrapping all chapters together.
-* "chapters[i].contents" wraps all inner components of the chapter.
-* Numbered markers that come together are grouped as an array(whether there is one or more it will be array to be consistant). Eg: [\mt1 & \mt2](#2-header)
 
-### Flat JSON
+### Schema overview
+Each JSON object would have all or some of the following fields (Note: the names of the these fields are up for discussion):
+* **tag**(or marker): USFM marker name to which this JSON object corresponds to.
+* **value**:The content of the marker. e.g. `﹛tag:"ide", value:"utf-8"﹜`. A <u>single place</u> to always access the content. This field in the `verseText` object also <u>combines text</u> snippets split across different character markers providing easy access.
+* **category*** (or type): An abstraction of USFM markers based on their semantic meaning and usage. [This](#categories) does not introduce any new semantics but makes explicit the implied semantics in the USFM spec. This allows the user to work with far <u>fewer items in their working memory</u> (less than 20 categories vs. 100+ USFM markers).
+* **children**: A list of all the marker objects that belong under _this_  object. e.g. `chapter` objects come under `book`, `verse` is a child of `paragraph`, a character marker as child of `verseText`, etc. Unlike start and end markers in USX, <u>nesting (per the spec and usfm.sty) is made obvious by the JSON structure</u> without having to do further processing to detect boundaries.
+* **attributes**: The attributes of character, milestone and fig markers, if present. If <u>default attributes</u> (those with only value and no attribute name specified) are used in the USFM their attribute name is explicity provided saving the users from having to figure them out.
+* **closing**: Present and set to `true` if a closing marker is present in the USFM. This enables apps to <u>reconstruct a more faithful USFM</u> from the JSON expression.
 
-* The USFM marker names become main keys and their text content the values. Exception is [milestone](#16-milestones).
-* Verse texts would occur as text items in the outer array, not as values of "v", "p" or  other such markers.
-* Markers that create a heirarchy in the structure like paragraphs, poetry, tables, list etc all are treated as empty(with values None or null).
-* Use of character-level(inline) markers may change the order or make multiple entries for outer marker, Eg: [\s and \jmp](#13-custom-attributes), [\ip and \bk](#2-header) & [\bk and \+nd](#11-nesting)
+`category` is the only mandatory field among these. In addtion to the above:
+- book object may have a **bookcode** field.
+- verse and chapter objects may have **altNumber** and **pubNumber** like in USX.
+- verseText may have a **ref**(or id) object summarizing the book-chapter-verse value it falls under.
+
+### Categories
+The `category` field may have **one** of the following values (in the indicated hierarchy):
+- _book_(or identification): Corresponds to the `id` marker.
+    - _header_ : All markers that occur under `id` and before `c`. Not dividing it further as Introduction, bookTitles, etc. to not expose that complexity to users.
+    - _chapter_: Corresponds to the `c` marker. This object will also include information on `ca` and `cp`, if present like in USX. Its `children` will be either _title_ or _text_ objects.
+        - _title_: Corresponds to markers like `s`, `ms`, `r`, etc. that form parts of a title and occurs under `c`.
+        - _text_(or content): The grouping of text containing markers that come under `c`, which are paragraph, list, poetry and table, within which user can find verses, verseText and notes.
+            - _paragraph_: Corresponds to markers like `p`, `m`, `pr`, etc.
+            - _poetry_: Corresponds to markers like `q`, `qa`, `qm`, etc.
+            - _list_: Corresponds to markers like `lh`, `li`, `lm`, `lf`, etc.
+            - _table_: Corresponds to markers `tr`, `tc`, `tcr`, `th` and `thr`.
+                - ---
+                - _verse_: Marker `v` and information on `va` and `vp`, if present like in USX. Its value will be the verse number and not verseText. Grandkids of _text_ objects.
+                - _footnote_: Markers like `f`, `fe` and their children. Grandkids of _text_ objects.
+                - _crossref_: Markers like `x`, `xe`, `xt` and their children. Grandkids of _text_ objects.
+                - _verseText_ and _noteText_: The text content. Note that this is not represented as children of _verse_ rather as children of _paragraph_-like objects in line with how the USFM spec defines it. This allows handling of cases were verse boundaries conficlt with paragraph boundaries.
+                    - _inline_(or characterMarker): Markers `bk`, `nd`, `+nd` etc.
+- _milestone_: Predefined milestones, custom milestones and znamespaces. This could come as a child of _book_, _chapter_ or even _text_ objects.
+- _studyBible_: Corresponds to `esb`-`esbe` pair. Can come as children of _book_ or _chapter_ and can have _title_ and _text_ objects as its children.
+- _block_: A grouping of markers to denote a semantic set as per the spec, especially numbered markers. e.g. `mt#`s, `toc#`s, `toca#`s, etc.
+
 
 
 ## 1. minimal
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -27,66 +55,58 @@
 \v 2 verse two
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "verse one\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "verse two"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "verse one",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "verse two",
+                  "ref": "GEN 1:2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "verse one\n",
-  {
-    "v": "2"
-  },
-  "verse two"
-]
 </pre></td>
 </tr></table>
 
 
 ## 2. header
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id MRK The Gospel of Mark
 \ide UTF-8
 \usfm 3.0
@@ -104,138 +124,117 @@ the statement...
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "MRK",
-      "fileDescription": "The Gospel of Mark"
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "MRK",
+  "value": "MRK The Gospel of Mark",
+  "description": "The Gospel of Mark",
+  "children": [
+    {
+      "tag": "ide",
+      "cat": "header",
+      "value": "UTF-8"
     },
-    "headers": [
-      {
-        "ide": "UTF-8"
-      },
-      {
-        "usfm": "3.0"
-      },
-      [
+    {
+      "tag": "usfm",
+      "cat": "header",
+      "value": "3.0"
+    },
+    {
+      "cat": "block",
+      "children": [
         {
-          "h": "Mark"
+          "tag": "h",
+          "cat": "header",
+          "value": "Mark"
         }
-      ],
-      [
+      ]
+    },
+    {
+      "cat": "block",
+      "children": [
         {
-          "mt2": [
-            "The Gospel according to"
-          ]
+          "tag": "mt2",
+          "cat": "header",
+          "value": "The Gospel according to"
         },
         {
-          "mt1": [
-            "MARK"
-          ]
+          "tag": "mt1",
+          "cat": "header",
+          "value": "MARK"
         }
-      ],
-      [
+      ]
+    },
+    {
+      "cat": "block",
+      "children": [
         {
-          "is": [
-            "Introduction"
-          ]
+          "tag": "is",
+          "cat": "header",
+          "value": "Introduction"
+        }
+      ]
+    },
+    {
+      "tag": "ip",
+      "cat": "header",
+      "children": [
+        {
+          "tag": "bk",
+          "cat": "inline",
+          "closing": true,
+          "value": "The Gospel according \nto Mark"
         }
       ],
-      {
-        "ip": [
-          {
-            "bk": [
-              "The Gospel according \nto Mark"
-            ],
-            "closing": "bk*"
-          },
-          "begins with \nthe statement..."
-        ]
-      }
-    ],
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+      "value": "The Gospel according \nto Mark begins with \nthe statement..."
+    },
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "MRK 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "MRK 1:2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "MRK"
-  },
-  {
-    "id": "The Gospel of Mark"
-  },
-  {
-    "ide": "UTF-8"
-  },
-  {
-    "usfm": "3.0"
-  },
-  {
-    "h": "Mark"
-  },
-  {
-    "mt2": "The Gospel according to"
-  },
-  {
-    "mt1": "MARK"
-  },
-  {
-    "is": "Introduction"
-  },
-  {
-    "bk": "The Gospel according \nto Mark",
-    "closing": "bk*"
-  },
-  {
-    "ip": "begins with \nthe statement..."
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 3. multiple-chapters
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -247,105 +246,96 @@ the statement...
 \v 2 the fourth verse
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "GEN 1:2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "c": "2",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the third verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the fourth verse"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "2",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the third verse",
+                  "ref": "GEN 2:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the fourth verse",
+                  "ref": "GEN 2:2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n",
-  {
-    "c": "2"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the third verse\n",
-  {
-    "v": "2"
-  },
-  "the fourth verse"
-]
 </pre></td>
 </tr></table>
 
 
 ## 4. multiple-paragraphs
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id JHN
 \c 1
 \s1 The Preaching of John the Baptist
@@ -370,176 +360,161 @@ he told the people,
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "JHN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          [
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "JHN",
+  "value": "JHN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "title",
+          "children": [
             {
-              "s1": [
-                "The Preaching of John the Baptist",
+              "tag": "s1",
+              "cat": "title",
+              "children": [
                 {
-                  "r": "(Matthew 3.1-12; Luke 3.1-18; John 1.19-28)"
+                  "tag": "r",
+                  "cat": "title",
+                  "value": "(Matthew 3.1-12; Luke 3.1-18; John 1.19-28)"
+                }
+              ],
+              "value": "The Preaching of John the Baptist"
+            }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "This is the Good News about Jesus Christ, \nthe Son of God.",
+                  "ref": "JHN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "It began as the prophet Isaiah had written:",
+                  "ref": "JHN 1:2"
                 }
               ]
             }
-          ],
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "This is the Good News about Jesus Christ, \nthe Son of God.\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "It began as the prophet Isaiah had written:\n"
-                ]
-              }
-            ]
-          },
-          {
-            "poetry": [
-              {
-                "q1": [
-                  {
-                    "verseText": [
-                      "“God said, ‘I will send my messenger \nahead of you\n"
-                    ]
-                  }
-                ]
-              },
-              {
-                "q2": [
-                  {
-                    "verseText": [
-                      "to open the way for you.’\n"
-                    ]
-                  }
-                ]
-              },
-              {
-                "q1": [
-                  {
-                    "v": "3"
-                  },
-                  {
-                    "verseText": [
-                      "Someone is shouting in the desert,\n"
-                    ]
-                  }
-                ]
-              },
-              {
-                "q2": [
-                  {
-                    "verseText": [
-                      "‘Get the road ready for the Lord;\n"
-                    ]
-                  }
-                ]
-              },
-              {
-                "q2": [
-                  {
-                    "verseText": [
-                      "make a straight path for him to travel!’”\n"
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "p": [
-              {
-                "v": "4"
-              },
-              {
-                "verseText": [
-                  "So John appeared in the desert, \nbaptizing and preaching. \n“Turn away from your sins and be baptized,” \nhe told the people, \n“and God will forgive your sins.”\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "q1",
+              "cat": "poetry",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "“God said, ‘I will send my messenger \nahead of you",
+                  "ref": "JHN 1:2"
+                }
+              ]
+            },
+            {
+              "tag": "q2",
+              "cat": "poetry",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "to open the way for you.’",
+                  "ref": "JHN 1:2"
+                }
+              ]
+            },
+            {
+              "tag": "q1",
+              "cat": "poetry",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "3"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "Someone is shouting in the desert,",
+                  "ref": "JHN 1:3"
+                }
+              ]
+            },
+            {
+              "tag": "q2",
+              "cat": "poetry",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "‘Get the road ready for the Lord;",
+                  "ref": "JHN 1:3"
+                }
+              ]
+            },
+            {
+              "tag": "q2",
+              "cat": "poetry",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "make a straight path for him to travel!’”",
+                  "ref": "JHN 1:3"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "4"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "So John appeared in the desert, \nbaptizing and preaching. \n“Turn away from your sins and be baptized,” \nhe told the people, \n“and God will forgive your sins.”",
+                  "ref": "JHN 1:4"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "JHN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "s1": "The Preaching of John the Baptist"
-  },
-  {
-    "r": "(Matthew 3.1-12; Luke 3.1-18; John 1.19-28)"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "This is the Good News about Jesus Christ, \nthe Son of God.\n",
-  {
-    "v": "2"
-  },
-  "It began as the prophet Isaiah had written:\n",
-  {
-    "q1": null
-  },
-  "“God said, ‘I will send my messenger \nahead of you\n",
-  {
-    "q2": null
-  },
-  "to open the way for you.’\n",
-  {
-    "q1": null
-  },
-  {
-    "v": "3"
-  },
-  "Someone is shouting in the desert,\n",
-  {
-    "q2": null
-  },
-  "‘Get the road ready for the Lord;\n",
-  {
-    "q2": null
-  },
-  "make a straight path for him to travel!’”\n",
-  {
-    "p": null
-  },
-  {
-    "v": "4"
-  },
-  "So John appeared in the desert, \nbaptizing and preaching. \n“Turn away from your sins and be baptized,” \nhe told the people, \n“and God will forgive your sins.”\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 5. section
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -551,107 +526,99 @@ he told the people,
 \v 4 the fourth verse
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              }
-            ]
-          },
-          [
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
             {
-              "s": [
-                "A new section"
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "GEN 1:2"
+                }
               ]
             }
-          ],
-          {
-            "p": [
-              {
-                "v": "3"
-              },
-              {
-                "verseText": [
-                  "the third verse\n"
-                ]
-              },
-              {
-                "v": "4"
-              },
-              {
-                "verseText": [
-                  "the fourth verse"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+          ]
+        },
+        {
+          "cat": "title",
+          "children": [
+            {
+              "tag": "s",
+              "cat": "title",
+              "value": "A new section"
+            }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "3"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the third verse",
+                  "ref": "GEN 1:3"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "4"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the fourth verse",
+                  "ref": "GEN 1:4"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n",
-  {
-    "s": "A new section"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "3"
-  },
-  "the third verse\n",
-  {
-    "v": "4"
-  },
-  "the fourth verse"
-]
 </pre></td>
 </tr></table>
 
 
 ## 6. footnote
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id MAT
 \c 1
 \p
@@ -665,132 +632,121 @@ do not have \fq the Son of God.\f*
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "MAT"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              },
-              {
-                "v": "3"
-              },
-              {
-                "verseText": [
-                  "This is the Good News \nabout Jesus Christ, the Son of \nGod. "
-                ]
-              },
-              {
-                "f": [
-                  {
-                    "caller": "+"
-                  },
-                  {
-                    "fr": [
-                      "1.1:"
-                    ]
-                  },
-                  {
-                    "ft": [
-                      "Some manuscripts \ndo not have"
-                    ]
-                  },
-                  {
-                    "fq": [
-                      "the Son of God."
-                    ]
-                  }
-                ],
-                "closing": "f*"
-              },
-              {
-                "verseText": [
-                  "\n"
-                ]
-              },
-              {
-                "v": "4"
-              },
-              {
-                "verseText": [
-                  "yet another verse.\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "MAT",
+  "value": "MAT",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "MAT 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "MAT 1:2"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "3"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "This is the Good News \nabout Jesus Christ, the Son of \nGod.",
+                  "ref": "MAT 1:3"
+                },
+                {
+                  "cat": "footnote",
+                  "ref": "MAT 1:3",
+                  "children": [
+                    {
+                      "tag": "f",
+                      "cat": "footnote",
+                      "closing": true,
+                      "children": [
+                        {
+                          "tag": "fr",
+                          "cat": "inline",
+                          "children": [
+                            {
+                              "cat": "noteText",
+                              "value": "1.1:"
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "ft",
+                          "cat": "inline",
+                          "children": [
+                            {
+                              "cat": "noteText",
+                              "value": "Some manuscripts \ndo not have"
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "fq",
+                          "cat": "inline",
+                          "children": [
+                            {
+                              "cat": "noteText",
+                              "value": "the Son of God."
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "4"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "yet another verse.",
+                  "ref": "MAT 1:4"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "MAT"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n",
-  {
-    "v": "3"
-  },
-  "This is the Good News \nabout Jesus Christ, the Son of \nGod. ",
-  {
-    "f": "+",
-    "closing": "f*"
-  },
-  {
-    "fr": "1.1:"
-  },
-  {
-    "ft": "Some manuscripts \ndo not have"
-  },
-  {
-    "fq": "the Son of God."
-  },
-  "\n",
-  {
-    "v": "4"
-  },
-  "yet another verse.\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 7. cross-refs
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id MAT
 \c 1
 \p
@@ -802,106 +758,101 @@ his home in a town named Nazareth.
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "MAT"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              },
-              {
-                "v": "3"
-              },
-              {
-                "x": [
-                  {
-                    "caller": "-"
-                  },
-                  {
-                    "xo": [
-                      "2.23:"
-                    ]
-                  },
-                  {
-                    "xt": [
-                      "Mrk 1.24; \nLuk 2.39; Jhn 1.45."
-                    ]
-                  }
-                ],
-                "closing": "x*"
-              },
-              {
-                "verseText": [
-                  "and made \nhis home in a town named Nazareth.\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "MAT",
+  "value": "MAT",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "MAT 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "MAT 1:2"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "3"
+                },
+                {
+                  "cat": "crossref",
+                  "ref": "MAT 1:3",
+                  "children": [
+                    {
+                      "tag": "x",
+                      "cat": "crossref",
+                      "closing": true,
+                      "children": [
+                        {
+                          "tag": "xo",
+                          "cat": "inline",
+                          "children": [
+                            {
+                              "cat": "noteText",
+                              "value": "2.23:"
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "xt",
+                          "cat": "inline",
+                          "children": [
+                            {
+                              "cat": "noteText",
+                              "value": "Mrk 1.24; \nLuk 2.39; Jhn 1.45."
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "cat": "verseText",
+                  "value": "and made \nhis home in a town named Nazareth.",
+                  "ref": "MAT 1:3"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "MAT"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n",
-  {
-    "v": "3"
-  },
-  {
-    "x": "-",
-    "closing": "x*"
-  },
-  {
-    "xo": "2.23:"
-  },
-  {
-    "xt": "Mrk 1.24; \nLuk 2.39; Jhn 1.45."
-  },
-  "and made \nhis home in a town named Nazareth.\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 8. character
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -914,90 +865,76 @@ Isaac, and Jacob,
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              },
-              {
-                "v": "15"
-              },
-              {
-                "verseText": [
-                  "Tell the Israelites that I, \nthe ",
-                  {
-                    "nd": [
-                      "Lord"
-                    ],
-                    "closing": "nd*"
-                  },
-                  ", the God of their \nancestors, the God of Abraham, \nIsaac, and Jacob,\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "GEN 1:2"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "15"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "Tell the Israelites that I, \nthe Lord , the God of their \nancestors, the God of Abraham, \nIsaac, and Jacob,",
+                  "children": [
+                    {
+                      "tag": "nd",
+                      "cat": "inline",
+                      "closing": true,
+                      "value": "Lord"
+                    }
+                  ],
+                  "ref": "GEN 1:15"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n",
-  {
-    "v": "15"
-  },
-  "Tell the Israelites that I, \nthe ",
-  {
-    "nd": "Lord",
-    "closing": "nd*"
-  },
-  ", the God of their \nancestors, the God of Abraham, \nIsaac, and Jacob,\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 9. attributes
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -1005,80 +942,69 @@ Isaac, and Jacob,
 \v 2 the second verse \w gracious|lemma="grace" \w*
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse ",
-                  {
-                    "w": [
-                      "gracious"
-                    ],
-                    "attributes": {
-                      "lemma": "grace"
-                    },
-                    "closing": "w*"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse gracious",
+                  "children": [
+                    {
+                      "tag": "w",
+                      "cat": "inline",
+                      "closing": true,
+                      "value": "gracious",
+                      "attributes": {
+                        "lemma": "grace"
+                      }
+                    }
+                  ],
+                  "ref": "GEN 1:2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse ",
-  {
-    "w": "gracious",
-    "lemma": "grace",
-    "closing": "w*"
-  }
-]
 </pre></td>
 </tr></table>
 
 
 ## 10. header
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id MRK 41MRKGNT92.SFM, Good News Translation, June 2003
 \h John
 \toc1 The Gospel according to John
@@ -1102,214 +1028,178 @@ other than the author of \bk Mark\bk*
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "MRK",
-      "fileDescription": "41MRKGNT92.SFM, Good News Translation, June 2003"
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "MRK",
+  "value": "MRK 41MRKGNT92.SFM, Good News Translation, June 2003",
+  "description": "41MRKGNT92.SFM, Good News Translation, June 2003",
+  "children": [
+    {
+      "cat": "block",
+      "children": [
+        {
+          "tag": "h",
+          "cat": "header",
+          "value": "John"
+        }
+      ]
     },
-    "headers": [
-      [
+    {
+      "cat": "block",
+      "children": [
         {
-          "h": "John"
-        }
-      ],
-      [
-        {
-          "toc1": "The Gospel according to John"
+          "tag": "toc1",
+          "cat": "header",
+          "value": "The Gospel according to John"
         },
         {
-          "toc2": "John"
+          "tag": "toc2",
+          "cat": "header",
+          "value": "John"
         }
-      ],
-      [
+      ]
+    },
+    {
+      "cat": "block",
+      "children": [
         {
-          "mt2": [
-            "The Gospel"
-          ]
+          "tag": "mt2",
+          "cat": "header",
+          "value": "The Gospel"
         },
         {
-          "mt3": [
-            "according to"
-          ]
+          "tag": "mt3",
+          "cat": "header",
+          "value": "according to"
         },
         {
-          "mt1": [
-            "JOHN"
-          ]
+          "tag": "mt1",
+          "cat": "header",
+          "value": "JOHN"
+        }
+      ]
+    },
+    {
+      "tag": "ip",
+      "cat": "header",
+      "children": [
+        {
+          "tag": "bk",
+          "cat": "inline",
+          "closing": true,
+          "value": "Mark"
         }
       ],
-      {
-        "ip": [
-          "The two endings to the Gospel, which are enclosed \nin brackets, are regarded as written by someone \nother than the author of",
-          {
-            "bk": [
-              "Mark"
-            ],
-            "closing": "bk*"
-          },
-          ""
-        ]
-      },
-      {
-        "iot": [
-          "Outline of Contents"
-        ]
-      },
-      {
-        "io1": [
-          "The beginning of the gospel",
-          {
-            "ior": "(1.1-13)",
-            "closing": "ior*"
-          }
-        ]
-      },
-      {
-        "io1": [
-          "Jesus' public ministry in Galilee",
-          {
-            "ior": "(1.14–9.50)",
-            "closing": "ior*"
-          }
-        ]
-      },
-      {
-        "io1": [
-          "From Galilee to Jerusalem",
-          {
-            "ior": "(10.1-52)",
-            "closing": "ior*"
-          }
-        ]
-      }
-    ],
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          [
+      "value": "The two endings to the Gospel, which are enclosed \nin brackets, are regarded as written by someone \nother than the author of Mark "
+    },
+    {
+      "tag": "iot",
+      "cat": "header",
+      "value": "Outline of Contents"
+    },
+    {
+      "tag": "io1",
+      "cat": "header",
+      "children": [
+        {
+          "tag": "ior",
+          "cat": "inline",
+          "closing": true,
+          "value": "(1.1-13)"
+        }
+      ],
+      "value": "The beginning of the gospel (1.1-13)"
+    },
+    {
+      "tag": "io1",
+      "cat": "header",
+      "children": [
+        {
+          "tag": "ior",
+          "cat": "inline",
+          "closing": true,
+          "value": "(1.14–9.50)"
+        }
+      ],
+      "value": "Jesus' public ministry in Galilee (1.14–9.50)"
+    },
+    {
+      "tag": "io1",
+      "cat": "header",
+      "children": [
+        {
+          "tag": "ior",
+          "cat": "inline",
+          "closing": true,
+          "value": "(10.1-52)"
+        }
+      ],
+      "value": "From Galilee to Jerusalem (10.1-52)"
+    },
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "title",
+          "children": [
             {
-              "ms": [
-                "BOOK ONE",
+              "tag": "ms",
+              "cat": "title",
+              "children": [
                 {
-                  "mr": "(Psalms 1–41)"
+                  "tag": "mr",
+                  "cat": "title",
+                  "value": "(Psalms 1–41)"
+                }
+              ],
+              "value": "BOOK ONE"
+            }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "MRK 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "MRK 1:2"
                 }
               ]
             }
-          ],
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "MRK"
-  },
-  {
-    "id": "41MRKGNT92.SFM, Good News Translation, June 2003"
-  },
-  {
-    "h": "John"
-  },
-  {
-    "toc1": "The Gospel according to John"
-  },
-  {
-    "toc2": "John"
-  },
-  {
-    "mt2": "The Gospel"
-  },
-  {
-    "mt3": "according to"
-  },
-  {
-    "mt1": "JOHN"
-  },
-  {
-    "ip": "The two endings to the Gospel, which are enclosed \nin brackets, are regarded as written by someone \nother than the author of"
-  },
-  {
-    "bk": "Mark",
-    "closing": "bk*"
-  },
-  {
-    "ip": ""
-  },
-  {
-    "iot": "Outline of Contents"
-  },
-  {
-    "io1": "The beginning of the gospel"
-  },
-  {
-    "ior": "(1.1-13)",
-    "closing": "ior*"
-  },
-  {
-    "io1": "Jesus' public ministry in Galilee"
-  },
-  {
-    "ior": "(1.14–9.50)",
-    "closing": "ior*"
-  },
-  {
-    "io1": "From Galilee to Jerusalem"
-  },
-  {
-    "ior": "(10.1-52)",
-    "closing": "ior*"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "ms": "BOOK ONE"
-  },
-  {
-    "mr": "(Psalms 1–41)"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 11. nesting
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -1322,104 +1212,84 @@ town of Waheb in the area of Suphah
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              },
-              {
-                "v": "14"
-              },
-              {
-                "verseText": [
-                  "That is \nwhy ",
-                  {
-                    "bk": [
-                      "The Book of the",
-                      {
-                        "+nd": [
-                          "Lord"
-                        ],
-                        "closing": "+nd*"
-                      },
-                      "'s \nBattles"
-                    ],
-                    "closing": "bk*"
-                  },
-                  "speaks of “...the \ntown of Waheb in the area of Suphah\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "GEN 1:2"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "14"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "That is \nwhy The Book of the Lord 's \nBattles speaks of “...the \ntown of Waheb in the area of Suphah",
+                  "children": [
+                    {
+                      "tag": "bk",
+                      "cat": "inline",
+                      "closing": true,
+                      "children": [
+                        {
+                          "tag": "+nd",
+                          "cat": "inline",
+                          "closing": true,
+                          "value": "Lord"
+                        }
+                      ],
+                      "value": "The Book of the Lord 's \nBattles"
+                    }
+                  ],
+                  "ref": "GEN 1:14"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n",
-  {
-    "v": "14"
-  },
-  "That is \nwhy ",
-  {
-    "bk": "The Book of the"
-  },
-  {
-    "+nd": "Lord",
-    "closing": "+nd*"
-  },
-  {
-    "bk": "'s \nBattles",
-    "closing": "bk*"
-  },
-  "speaks of “...the \ntown of Waheb in the area of Suphah\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 12. default-attributes
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -1429,82 +1299,69 @@ with \w gracious|grace\w*
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\nwith ",
-                  {
-                    "w": [
-                      "gracious"
-                    ],
-                    "attributes": {
-                      "lemma": "grace"
-                    },
-                    "closing": "w*"
-                  },
-                  "\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse\nwith gracious",
+                  "children": [
+                    {
+                      "tag": "w",
+                      "cat": "inline",
+                      "closing": true,
+                      "value": "gracious",
+                      "attributes": {
+                        "lemma": "grace"
+                      }
+                    }
+                  ],
+                  "ref": "GEN 1:2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\nwith ",
-  {
-    "w": "gracious",
-    "lemma": "grace",
-    "closing": "w*"
-  },
-  "\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 13. custom-attributes
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -1520,160 +1377,144 @@ with \w gracious|grace\w*
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse \n",
-                  {
-                    "w": [
-                      "gracious"
-                    ],
-                    "attributes": {
-                      "x-myattr": "metadata"
-                    },
-                    "closing": "w*"
-                  },
-                  "\n"
-                ]
-              }
-            ]
-          },
-          {
-            "poetry": [
-              {
-                "q1": [
-                  {
-                    "verseText": [
-                      "“Someone is shouting in the desert,\n"
-                    ]
-                  }
-                ]
-              },
-              {
-                "q2": [
-                  {
-                    "verseText": [
-                      "‘Prepare a road for the Lord;\n"
-                    ]
-                  }
-                ]
-              },
-              {
-                "q2": [
-                  {
-                    "verseText": [
-                      "make a straight path for him to travel!’ ”\n"
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          [
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
             {
-              "s": [
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
                 {
-                  "jmp": "",
-                  "attributes": {
-                    "link-id": "article-john_the_baptist"
-                  },
-                  "closing": "jmp*"
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
                 },
-                "John the Baptist"
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse gracious",
+                  "children": [
+                    {
+                      "tag": "w",
+                      "cat": "inline",
+                      "closing": true,
+                      "value": "gracious",
+                      "attributes": {
+                        "x-myattr": "metadata"
+                      }
+                    }
+                  ],
+                  "ref": "GEN 1:2"
+                }
               ]
             }
-          ],
-          {
-            "p": [
-              {
-                "verseText": [
-                  "John is sometimes called...\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "q1",
+              "cat": "poetry",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "“Someone is shouting in the desert,",
+                  "ref": "GEN 1:2"
+                }
+              ]
+            },
+            {
+              "tag": "q2",
+              "cat": "poetry",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "‘Prepare a road for the Lord;",
+                  "ref": "GEN 1:2"
+                }
+              ]
+            },
+            {
+              "tag": "q2",
+              "cat": "poetry",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "make a straight path for him to travel!’ ”",
+                  "ref": "GEN 1:2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cat": "title",
+          "children": [
+            {
+              "tag": "s",
+              "cat": "title",
+              "children": [
+                {
+                  "tag": "jmp",
+                  "cat": "inline",
+                  "closing": true,
+                  "value": "",
+                  "attributes": {
+                    "link-id": "article-john_the_baptist"
+                  }
+                }
+              ],
+              "value": " John the Baptist"
+            }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "John is sometimes called...",
+                  "ref": "GEN 1:2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse \n",
-  {
-    "w": "gracious",
-    "x-myattr": "metadata",
-    "closing": "w*"
-  },
-  "\n",
-  {
-    "q1": null
-  },
-  "“Someone is shouting in the desert,\n",
-  {
-    "q2": null
-  },
-  "‘Prepare a road for the Lord;\n",
-  {
-    "q2": null
-  },
-  "make a straight path for him to travel!’ ”\n",
-  {
-    "jmp": "",
-    "link-id": "article-john_the_baptist",
-    "closing": "jmp*"
-  },
-  {
-    "s": "John the Baptist"
-  },
-  {
-    "p": null
-  },
-  "John is sometimes called...\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 14. list
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -1696,192 +1537,171 @@ administrators of the tribes of Israel.
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "c": "2",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the third verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the fourth verse\n"
-                ]
-              }
-            ]
-          },
-          [
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
             {
-              "s1": [
-                "Administration of the \nTribes of Israel"
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "GEN 1:2"
+                }
               ]
             }
-          ],
-          {
-            "list": [
-              {
-                "lh": [
-                  {
-                    "v": "16-22"
-                  },
-                  {
-                    "verseText": [
-                      "This is the list of the \nadministrators of the tribes of Israel:\n"
-                    ]
-                  }
-                ]
-              },
-              [
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "2",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
                 {
-                  "li1": [
-                    {
-                      "verseText": [
-                        "Reuben - Eliezer son of Zichri\n"
-                      ]
-                    }
-                  ]
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
                 },
                 {
-                  "li1": [
-                    {
-                      "verseText": [
-                        "Simeon - Shephatiah son of Maacah\n"
-                      ]
-                    }
-                  ]
+                  "cat": "verseText",
+                  "value": "the third verse",
+                  "ref": "GEN 2:1"
                 },
                 {
-                  "li1": [
-                    {
-                      "verseText": [
-                        "Levi - Hashabiah son of Kemuel\n"
-                      ]
-                    }
-                  ]
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the fourth verse",
+                  "ref": "GEN 2:2"
                 }
-              ],
-              {
-                "lf": [
-                  {
-                    "verseText": [
-                      "This was the list of the \nadministrators of the tribes of Israel.\n"
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+              ]
+            }
+          ]
+        },
+        {
+          "cat": "title",
+          "children": [
+            {
+              "tag": "s1",
+              "cat": "title",
+              "value": "Administration of the \nTribes of Israel"
+            }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "lh",
+              "cat": "list",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "16-22"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "This is the list of the \nadministrators of the tribes of Israel:",
+                  "ref": "GEN 2:16-22"
+                }
+              ]
+            },
+            {
+              "tag": "li1",
+              "cat": "list",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "Reuben - Eliezer son of Zichri",
+                  "ref": "GEN 2:16-22"
+                }
+              ]
+            },
+            {
+              "tag": "li1",
+              "cat": "list",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "Simeon - Shephatiah son of Maacah",
+                  "ref": "GEN 2:16-22"
+                }
+              ]
+            },
+            {
+              "tag": "li1",
+              "cat": "list",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "Levi - Hashabiah son of Kemuel",
+                  "ref": "GEN 2:16-22"
+                }
+              ]
+            },
+            {
+              "tag": "lf",
+              "cat": "list",
+              "children": [
+                {
+                  "cat": "verseText",
+                  "value": "This was the list of the \nadministrators of the tribes of Israel.",
+                  "ref": "GEN 2:16-22"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n",
-  {
-    "c": "2"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the third verse\n",
-  {
-    "v": "2"
-  },
-  "the fourth verse\n",
-  {
-    "s1": "Administration of the \nTribes of Israel"
-  },
-  {
-    "lh": null
-  },
-  {
-    "v": "16-22"
-  },
-  "This is the list of the \nadministrators of the tribes of Israel:\n",
-  {
-    "li1": null
-  },
-  "Reuben - Eliezer son of Zichri\n",
-  {
-    "li1": null
-  },
-  "Simeon - Shephatiah son of Maacah\n",
-  {
-    "li1": null
-  },
-  "Levi - Hashabiah son of Kemuel\n",
-  {
-    "lf": null
-  },
-  "This was the list of the \nadministrators of the tribes of Israel.\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 15. table
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -1900,261 +1720,240 @@ son of Helon
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              }
-            ]
-          },
-          {
-            "p": [
-              {
-                "v": "12-83"
-              },
-              {
-                "verseText": [
-                  "They presented their \nofferings in the following order:\n"
-                ]
-              }
-            ]
-          },
-          {
-            "table": [
-              {
-                "tr": [
-                  {
-                    "th1": [
-                      {
-                        "verseText": [
-                          "Day "
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "th2": [
-                      {
-                        "verseText": [
-                          "Tribe "
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "th3": [
-                      {
-                        "verseText": [
-                          "Leader\n"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "tr": [
-                  {
-                    "tcr1": [
-                      {
-                        "verseText": [
-                          "1st "
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "tc2": [
-                      {
-                        "verseText": [
-                          "Judah "
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "tc3": [
-                      {
-                        "verseText": [
-                          "Nahshon \nson of Amminadab\n"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "tr": [
-                  {
-                    "tcr1": [
-                      {
-                        "verseText": [
-                          "2nd "
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "tc2": [
-                      {
-                        "verseText": [
-                          "Issachar "
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "tc3": [
-                      {
-                        "verseText": [
-                          "Nethanel \nson of Zuar\n"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "tr": [
-                  {
-                    "tcr1": [
-                      {
-                        "verseText": [
-                          "3rd "
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "tc2": [
-                      {
-                        "verseText": [
-                          "Zebulun "
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "tc3": [
-                      {
-                        "verseText": [
-                          "Eliab \nson of Helon\n"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "GEN 1:2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "12-83"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "They presented their \nofferings in the following order:",
+                  "ref": "GEN 1:12-83"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "tr",
+              "cat": "table",
+              "children": [
+                {
+                  "tag": "th1",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "Day",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                },
+                {
+                  "tag": "th2",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "Tribe",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                },
+                {
+                  "tag": "th3",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "Leader",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "tag": "tr",
+              "cat": "table",
+              "children": [
+                {
+                  "tag": "tcr1",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "1st",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                },
+                {
+                  "tag": "tc2",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "Judah",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                },
+                {
+                  "tag": "tc3",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "Nahshon \nson of Amminadab",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "tag": "tr",
+              "cat": "table",
+              "children": [
+                {
+                  "tag": "tcr1",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "2nd",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                },
+                {
+                  "tag": "tc2",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "Issachar",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                },
+                {
+                  "tag": "tc3",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "Nethanel \nson of Zuar",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "tag": "tr",
+              "cat": "table",
+              "children": [
+                {
+                  "tag": "tcr1",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "3rd",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                },
+                {
+                  "tag": "tc2",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "Zebulun",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                },
+                {
+                  "tag": "tc3",
+                  "cat": "table",
+                  "children": [
+                    {
+                      "cat": "verseText",
+                      "value": "Eliab \nson of Helon",
+                      "ref": "GEN 1:12-83"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n",
-  {
-    "p": null
-  },
-  {
-    "v": "12-83"
-  },
-  "They presented their \nofferings in the following order:\n",
-  {
-    "th1": null
-  },
-  "Day ",
-  {
-    "th2": null
-  },
-  "Tribe ",
-  {
-    "th3": null
-  },
-  "Leader\n",
-  {
-    "tcr1": null
-  },
-  "1st ",
-  {
-    "tc2": null
-  },
-  "Judah ",
-  {
-    "tc3": null
-  },
-  "Nahshon \nson of Amminadab\n",
-  {
-    "tcr1": null
-  },
-  "2nd ",
-  {
-    "tc2": null
-  },
-  "Issachar ",
-  {
-    "tc3": null
-  },
-  "Nethanel \nson of Zuar\n",
-  {
-    "tcr1": null
-  },
-  "3rd ",
-  {
-    "tc2": null
-  },
-  "Zebulun ",
-  {
-    "tc3": null
-  },
-  "Eliab \nson of Helon\n"
-]
 </pre></td>
 </tr></table>
 
 
 ## 16. milestones
 
-<table><tr><th>Input</th><th>3.x Nested</th><th>3.x Flat</th></tr><td>     <pre>
+<table><tr><th>Input</th><th>3.x JSON</th></tr><td>     <pre>
 \id GEN
 \c 1
 \p
@@ -2167,99 +1966,76 @@ son of Helon
 
 </pre></td><td><pre>
 {
-  "book": {
-    "id": {
-      "bookCode": "GEN"
-    },
-    "chapters": [
-      {
-        "c": "1",
-        "contents": [
-          {
-            "p": [
-              {
-                "v": "1"
-              },
-              {
-                "verseText": [
-                  "the first verse\n"
-                ]
-              },
-              {
-                "v": "2"
-              },
-              {
-                "verseText": [
-                  "the second verse\n"
-                ]
-              },
-              {
-                "v": "3"
-              },
-              {
-                "milestone": "qt-s",
-                "attributes": {
-                  "sid": "qt_123",
-                  "who": "Pilate"
+  "tag": "id",
+  "cat": "book",
+  "bookCode": "GEN",
+  "value": "GEN",
+  "children": [
+    {
+      "tag": "c",
+      "cat": "chapter",
+      "value": "1",
+      "children": [
+        {
+          "cat": "text",
+          "children": [
+            {
+              "tag": "p",
+              "cat": "paragraph",
+              "children": [
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "1"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the first verse",
+                  "ref": "GEN 1:1"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "2"
+                },
+                {
+                  "cat": "verseText",
+                  "value": "the second verse",
+                  "ref": "GEN 1:2"
+                },
+                {
+                  "tag": "v",
+                  "cat": "verse",
+                  "value": "3"
+                },
+                {
+                  "cat": "milestone",
+                  "tag": "qt-s",
+                  "attributes": {
+                    "sid": "qt_123",
+                    "who": "Pilate"
+                  }
+                },
+                {
+                  "cat": "verseText",
+                  "value": "“Are you the king of the Jews?”",
+                  "ref": "GEN 1:3"
+                },
+                {
+                  "cat": "milestone",
+                  "tag": "qt-e",
+                  "attributes": {
+                    "eid": "qt_123"
+                  }
                 }
-              },
-              {
-                "verseText": [
-                  "\n“Are you the king of the Jews?”\n"
-                ]
-              },
-              {
-                "milestone": "qt-e",
-                "attributes": {
-                  "eid": "qt_123"
-                }
-              },
-              {
-                "verseText": [
-                  "\n"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-</pre></td><td><pre>
-[
-  {
-    "id": "GEN"
-  },
-  {
-    "c": "1"
-  },
-  {
-    "p": null
-  },
-  {
-    "v": "1"
-  },
-  "the first verse\n",
-  {
-    "v": "2"
-  },
-  "the second verse\n",
-  {
-    "v": "3"
-  },
-  {
-    "milestone": "qt-s",
-    "sid": "qt_123",
-    "who": "Pilate"
-  },
-  "\n“Are you the king of the Jews?”\n",
-  {
-    "milestone": "qt-e",
-    "eid": "qt_123"
-  },
-  "\n"
-]
 </pre></td>
 </tr></table>
 
