@@ -842,52 +842,69 @@ class USFMParser():
                 f'\n\t{err_str}'+\
                 "\nUse ignore_errors=True, to generate output inspite of errors")
 
-        if filters is None:
-            filters = list(Filter)
-        if Filter.PARAGRAPHS in filters:
-            filters.remove(Filter.PARAGRAPHS)
+        def scripture_json_str(json_obj):
+            '''convert dict to a string eleganlty to add in list o/p'''
+            string = ""
+            if isinstance(json_obj, dict):
+                if "tag" in json_obj:
+                    string += "tag=" + json_obj['tag']
+                if "value" in json_obj:
+                    string += json_obj['value']
+            else:
+                strings = []
+                for child in json_obj['children']:
+                    strings.append(scripture_json(child))
+                string = "\n".join(strings)
+            return string
+
         scripture_json = self.to_dict(filters, ignore_errors=ignore_errors)
         table_output = [["Book","Chapter","Verse","Verse-Text","Notes","Milestone","Other"]]
-        book = scripture_json['book']['id']['bookCode']
-        verse_num = 0
+        book = scripture_json['bookCode']
+        verse_num = None
         verse_text = ""
         note_text = ""
         ms_text = ""
-        title_text = ''
-        if "chapters" not in scripture_json['book']:
-            return table_output
-        for chap in scripture_json['book']['chapters']:
-            chapter = chap['c']
-            for item in chap['contents']:
-                if not item:
-                    # temporary fix. to be removed when implementing this to work with new flat JSON
-                    continue
-                first_key = list(item.keys())[0]
-                if first_key == "v":
-                    if verse_num != 0:
-                        row = [book, chapter, verse_num,
-                                verse_text,note_text,
-                                ms_text,title_text]
-                        table_output.append(row)
-                    verse_text = ""
-                    note_text = ""
-                    ms_text = ""
-                    title_text = ''
-                    verse_num = item['v']
-                elif first_key == 'verseText':
-                    verse_text += item['verseText'] +" "
-                elif first_key == "milestone":
-                    ms_text += str(item) + "\n"
-                elif first_key in CHAR_STYLE_MARKERS:
-                    verse_text += str(item[first_key]) + " "
-                elif first_key in NOTE_MARKERS:
-                    note_text += str(item)
-                else:
-                    title_text += str(item[first_key])
-            row = [book, chapter, verse_num,
-                    verse_text,note_text,
-                    ms_text,title_text]
-            table_output.append(row)
+        other_text = ''
+        chapter = ""
+        for book_child in scripture_json['children']:
+            if book_child['cat'] == "chapter":
+                chapter = book_child['value']
+                for chap_child in book_child['children']:
+                    if chap_child['cat'] == "text":
+                        for text_child in chap_child['children']:
+                            for grand_child in text_child['children']:
+                                if grand_child['cat'] == "verse":
+                                    if verse_num is not None:
+                                        row = [book, chapter, verse_num,
+                                                verse_text,note_text,
+                                                ms_text,other_text]
+                                        table_output.append(row)
+                                    verse_text = ""
+                                    note_text = ""
+                                    ms_text = ""
+                                    other_text = ''
+                                    verse_num = grand_child['value']
+                                elif grand_child['cat'] == 'verseText':
+                                    verse_text += grand_child['value']
+                                    if "children" in grand_child:
+                                        for little_one in grand_child['children']:
+                                            if little_one['cat'] == "milestone":
+                                                ms_text += scripture_json_str(little_one) + "\n"
+                                            # else:
+                                            #      other_text += scripture_json_str(little_one) + "\n"
+
+                                elif grand_child['cat'] == "milestone":
+                                    ms_text += scripture_json_str(grand_child) + "\n"
+                                elif grand_child["cat"] in ["footnote", "crossref"]:
+                                    note_text += scripture_json_str(grand_child)
+                                # else:
+                                #     other_text += scripture_json_str(grand_child)
+                    # else:
+                    #     other_text += scripture_json_str(chap_child)
+        row = [book, chapter, verse_num,
+                verse_text,note_text,
+                ms_text,other_text]
+        table_output.append(row)
         return table_output
 
     def to_markdown(self):
