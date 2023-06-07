@@ -1,0 +1,82 @@
+{
+    "marker": "id",
+    "type": "book",
+    "bookCode": "PRO",
+    "value": "PRO Unlocked Literal Bible",
+    "description": "Unlocked Literal Bible",
+    "contents": [
+        {
+            "marker": "ide",
+            "type": "header",
+            "value": "UTF-8"
+        },
+        {
+            "marker": "c",
+            "type": "chapter",
+            "value": "1",
+            "contents": [
+                {
+                    "type": "title",
+                    "contents": [
+                        {
+                            "marker": "s5",
+                            "type": "sBlockContent"
+                        }
+                    ]
+                },
+                {
+                    "type": "block",
+                    "contents": [
+                        {
+                            "marker": "p",
+                            "type": "paragraphContent",
+                            "contents": [
+                                {
+                                    "marker": "v",
+                                    "type": "verse",
+                                    "value": "1",
+                                    "verseNumber": "1"
+                                },
+                                {
+                                    "type": "verseText",
+                                    "value": "correct verse"
+                                },
+                                {
+                                    "marker": "v",
+                                    "type": "verse",
+                                    "value": "2",
+                                    "verseNumber": "2"
+                                },
+                                {
+                                    "type": "verseText",
+                                    "value": "another correct verse ",
+                                    "contents": [
+                                        {
+                                            "marker": "w",
+                                            "type": "verseText",
+                                            "closing": true,
+                                            "value": "verse",
+                                            "attributes": {
+                                                "lemma": "gloassary entry"
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "marker": "v",
+                                    "type": "verse",
+                                    "value": "3",
+                                    "verseNumber": "3"
+                                },
+                                {
+                                    "type": "verseText",
+                                    "value": "wrong verse"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
