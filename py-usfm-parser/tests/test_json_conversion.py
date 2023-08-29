@@ -19,6 +19,9 @@ def test_dict_converions_without_filter(file_path):
     assert not test_parser.errors, test_parser.errors
     usfm_dict = test_parser.to_usj()
     assert isinstance(usfm_dict, dict)
+    # usj_path = file_path.replace("origin.usfm", "origin-usj.json")
+    # with open(usj_path, "w", encoding='utf-8') as usj_file:
+    #     json.dump(usfm_dict, usj_file, indent=4, ensure_ascii=False)
 
 def get_types(element):
     '''Recursive function to find all keys in the dict output'''
@@ -39,8 +42,9 @@ def get_types(element):
                 types.append("vp")
         if "category" in element:
             types.append("cat")
-        for item in element['content']:
-            types += get_types(item)
+        if 'content' in element:
+            for item in element['content']:
+                types += get_types(item)
     return types
 
 @pytest.mark.parametrize('file_path', test_files)
