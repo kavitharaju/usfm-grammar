@@ -4,12 +4,20 @@ znamespace
 \id GEN
 \zhead some text
 \c 1
-\p
 \z-empty
+\p
+\z-extra Some text content which is not scripture \*
 \v 1 text \zinline inner text \zinline*
 \v 2 text
 \v 3 text \zattrib inner text |x-key="val" \zattrib*
 \v 4 text
+\rem test comment to chekc if para flow breaks
+\v 5 mote text
+\z-para check inner para
+\v 6 text
+\c 2
+\z-extra Some text content which is not scripture \*
+\p scripture continues
 --------------------------------------------------------------------------------
 
 (File
