@@ -63,7 +63,7 @@ function excludeMarkersInUsj(
   if (excludeMarkers.includes(thisMarker)) {
     thisMarkerNeeded = false;
     excludedParent = true;
-    if (MARKERS_WITH_DISCARDABLE_CONTENTS.includes(thisMarker)) {
+    if (MARKERS_WITH_DISCARDABLE_CONTENTS.includes(thisMarker) || thisMarker.startsWith('z')) {
       innerContentNeeded = false;
     }
   }
@@ -113,7 +113,7 @@ function includeMarkersInUsj(
   } 
   const thisMarkerNeeded = includeMarkers.includes(thisMarker) || thisMarker === '';
   const innerContentNeeded = (thisMarkerNeeded ||
-    !MARKERS_WITH_DISCARDABLE_CONTENTS.includes(thisMarker));
+    !(MARKERS_WITH_DISCARDABLE_CONTENTS.includes(thisMarker) || thisMarker.startsWith('z')));
 
   if (innerContentNeeded && 'content' in inputUsj) {
     inputUsj.content.forEach(item => {

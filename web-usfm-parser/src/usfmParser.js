@@ -5,6 +5,7 @@ import ListGenerator from './listGenerator.js';
 import USXGenerator from './usxGenerator.js';
 import { ORIGINAL_VREF } from './utils/vrefs.js';
 import { Filter } from './filters.js';
+import ExtensionReader from './markersExtReader.js';
 
 class USFMParser {
   static language = null;
@@ -26,10 +27,12 @@ class USFMParser {
     fromUsx = null,
     fromBibleNlp = null,
     bookCode = null,
+    markersExt = null,
   ) {
     this.syntaxTree = null;
     this.errors = [];
     this.warnings = [];
+    this.markerExtensions = null;
 
     let inputsGiven = 0;
     if (usfmString !== null) {
@@ -75,6 +78,15 @@ Only one of USFM, USJ, USX or BibleNLP is supported in one object.`);
       this.bibleNlp = fromBibleNlp;
       this.usfm = this.convertBibleNLPtoUSFM(bookCode);
     }
+
+    if (markersExt !== null) {
+      this.markerExtensions = new ExtensionReader();
+      this.markerExtensions.readToObject(markersExt);
+      if (Object.keys(this.markerExtensions.extensions).length > 0) {
+        this.usfm = this.markerExtensions.replaceCustomMarkers(this.usfm);
+      }
+    }
+
     this.parser = null;
     this.initializeParser();
 
@@ -196,17 +208,45 @@ Refer docs: https://docs.usfm.bible/usfm/3.1.2/syntax.html#_usx_usfm_xml`);
   }
 
   checkforMissing(node) {
-    for (const n of node.children) {
-      if (n.isMissing) {
+    const cursor = node.walk();
+
+    do {
+      const currentNode = cursor.currentNode;
+
+      if (currentNode.isMissing) {
         this.errors.push(
-          `At ${n.startPosition.row + 1}:${
-            n.startPosition.column
-          }, Error: Missing ${n.type}`,
+          `At ${currentNode.startPosition.row + 1}:${
+            currentNode.startPosition.column
+          }, Error: Missing ${currentNode.type}`,
         );
       }
-      this.checkforMissing(n);
-    }
+
+      if (cursor.gotoFirstChild()) {
+        continue;
+      }
+
+      while (!cursor.gotoNextSibling()) {
+        if (!cursor.gotoParent()) {
+          return;
+        }
+      }
+    } while (true);
   }
+  // checkforMissing(node) {
+  //   console.log('Checking for missing nodes in:', node.type, 'at');
+  //   console.log(node.children.map(nod => nod.type).join(', '));
+  //   for (const n of node.children) {
+  //     if (n.isMissing) {
+  //       console.log(`Missing node found: ${n.type} `);
+  //       this.errors.push(
+  //         `At ${n.startPosition.row + 1}:${
+  //           n.startPosition.column
+  //         }, Error: Missing ${n.type}`,
+  //       );
+  //     }
+  //     this.checkforMissing(n);
+  //   }
+  // }
 
   convertUSJToUSFM() {
     const outputUSFM = new USFMGenerator().usjToUsfm(this.usj); // Simulated conversion

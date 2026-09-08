@@ -79,7 +79,11 @@ class USXGenerator {
     addHandlers(['cl', 'cl', 'cp', 'vp'], this.node2UsxGeneric);
     addHandlers(['ca', 'va'], this.node2UsxCaVa);
     addHandlers(['table', 'tr'], this.node2UsxTable);
-    addHandlers(['milestone', 'zNameSpace'], this.node2UsxMilestone);
+    addHandlers(['milestone'], this.node2UsxMilestone);
+    addHandlers(
+      ['zNameSpacePara', 'zNameSpaceChar', 'zNameSpaceNote', 'zNameSpaceMS'],
+      this.node2UsxCustom,
+    );
     addHandlers(['esb', 'cat', 'fig', 'ref'], this.node2UsxSpecial);
     addHandlers(NOTE_MARKERS, this.node2UsxNotes);
     addHandlers(
@@ -574,6 +578,49 @@ class USXGenerator {
         this.node2Usx(child, msXmlNode);
       }
     });
+  }
+
+  node2UsxCustom(node, parentXmlNode) {
+    const nodeTypeMap = {
+      zNameSpacePara: 'para',
+      zNameSpaceChar: 'char',
+      zNameSpaceNote: 'note',
+      zNameSpaceMS: 'ms',
+    };
+    const nodeType = nodeTypeMap[node.type];
+    if (nodeType === undefined) {
+      this.warnings.push(`Unknown custom node type: ${node.type}`);
+      return;
+    }
+
+    const customXmlNode = parentXmlNode.ownerDocument.createElement(nodeType);
+    for (const child of node.children) {
+      if (child.type.startsWith('zSpaceTag')) {
+        const marker = this.usfm
+          .slice(child.startIndex, child.endIndex)
+          .trim();
+        customXmlNode.setAttribute(
+          'style',
+          marker.split('_').slice(1).join('_'),
+        );
+      } else if (child.type.endsWith('Attribute')) {
+        this.node2Usx(child, customXmlNode);
+      } else if (child.type.startsWith('zSpaceClose')) {
+        const closeMarker = this.usfm
+          .slice(child.startIndex, child.endIndex)
+          .trim();
+        const closedMarker = closeMarker.split('_').slice(1).join('_');
+        if (closedMarker !== customXmlNode.getAttribute('style')) {
+          this.warnings.push(
+            `Custom node closed with a different marker: ${closedMarker} ` +
+            `instead of ${customXmlNode.getAttribute('style')}`,
+          );
+        }
+      } else {
+        this.node2Usx(child, customXmlNode);
+      }
+    }
+    parentXmlNode.appendChild(customXmlNode);
   }
 
   node2UsxSpecial(node, parentXmlNode) {

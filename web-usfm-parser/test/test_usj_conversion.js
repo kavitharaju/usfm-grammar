@@ -7,6 +7,7 @@ import {
   isValidUsfm,
   excludeUSJs,
   findAllMarkers,
+  customMarkersExt,
 } from "./config.js";
 import {USFMParser, Filter} from "../src/index.js";
 
@@ -105,7 +106,7 @@ describe("Test USFM-USJ-USFM roundtripping", () => {
         const usj = cached.usj;
         const originalUsfm = cached.usfm;
 
-        const testParser2 = new USFMParser(null, usj);
+        const testParser2 = new USFMParser(null, usj, null, null, null, customMarkersExt);
         const generatedUSFM = testParser2.usfm;
 
         assert.strictEqual(typeof generatedUSFM, "string");
@@ -229,7 +230,7 @@ describe("Try invalid USJ", () => {
   it("without type", async () => {
     const usj = {"some key": "qwerty", content: []};
     try {
-      const testParser = new USFMParser(null, usj);
+      const testParser = new USFMParser(null, usj, null, null, null, customMarkersExt);
     } catch (err) {
       assert.strictEqual(
         "Invalid input for USJ. Expected USJ json object.",
@@ -241,7 +242,7 @@ describe("Try invalid USJ", () => {
   it("interger", () => {
     const usj = {type: "para", content: [1, 2, 3]};
     try {
-      const testParser = new USFMParser(null, usj);
+      const testParser = new USFMParser(null, usj, null, null, null, customMarkersExt);
     } catch (err) {
       assert.strictEqual(
         "Invalid input for USJ. Expected USJ json object.",
@@ -253,7 +254,7 @@ describe("Try invalid USJ", () => {
   it("content with array", () => {
     const usj = {"some key": "qwerty", content: [["test", "test", "test"]]};
     try {
-      const testParser = new USFMParser(null, usj);
+      const testParser = new USFMParser(null, usj, null, null, null, customMarkersExt);
     } catch (err) {
       assert.strictEqual(
         "Invalid input for USJ. Expected USJ json object.",

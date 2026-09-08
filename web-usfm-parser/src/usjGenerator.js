@@ -484,6 +484,50 @@ class USJGenerator {
       parentJsonObj.content.push(refJsonObj);
     }
   }
+
+  nodeToUSJCustom(node, parentJsonObj) {
+    const nodeTypeMap = {
+      zNameSpacePara: 'para',
+      zNameSpaceChar: 'char',
+      zNameSpaceNote: 'note',
+      zNameSpaceMS: 'ms',
+    };
+    const nodeType = nodeTypeMap[node.type];
+    if (nodeType === undefined) {
+      this.warnings.push(`Unknown custom node type: ${node.type}`);
+      return;
+    }
+
+    const customJsonObj = { type: nodeType };
+    for (const child of node.children) {
+      if (child.type.startsWith('zSpaceTag')) {
+        const marker = this.usfm
+          .slice(child.startIndex, child.endIndex)
+          .trim();
+        customJsonObj.marker = marker.split('_').slice(1).join('_');
+      } else if (child.type.endsWith('Attribute')) {
+        this.nodeToUSJ(child, customJsonObj);
+      } else if (child.type.startsWith('zSpaceClose')) {
+        const closeMarker = this.usfm
+          .slice(child.startIndex, child.endIndex)
+          .trim();
+        const closedMarker = closeMarker.split('_').slice(1).join('_');
+        if (closedMarker !== customJsonObj.marker) {
+          this.warnings.push(
+            `Custom node closed with a different marker: ${closedMarker} ` +
+            `instead of ${customJsonObj.marker}`,
+          );
+        }
+      } else {
+        if (!customJsonObj.content) {
+          customJsonObj.content = [];
+        }
+        this.nodeToUSJ(child, customJsonObj);
+      }
+    }
+    parentJsonObj.content.push(customJsonObj);
+  }
+
   nodeToUSJGeneric(node, parentJsonObj) {
     // Build nodes for para style markers in USJ
     const tagNode = node.children[0] ? node.children[0] : node;
@@ -559,7 +603,11 @@ class USJGenerator {
     addHandlers(['cl', 'cp', 'vp'], this.nodeToUSJGeneric);
     addHandlers(['ca', 'va'], this.nodeToUSJCaVa);
     addHandlers(['table', 'tr'], this.nodeToUSJTable);
-    addHandlers(['milestone', 'zNameSpace'], this.nodeToUSJMilestone);
+    addHandlers(['milestone'], this.nodeToUSJMilestone);
+    addHandlers(
+      ['zNameSpacePara', 'zNameSpaceChar', 'zNameSpaceNote', 'zNameSpaceMS'],
+      this.nodeToUSJCustom,
+    );
     addHandlers(['esb', 'cat', 'fig', 'ref'], this.nodeToUSJSpecial);
     addHandlers(NOTE_MARKERS, this.nodeToUSJNotes);
     addHandlers(
