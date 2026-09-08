@@ -7,6 +7,7 @@ const {
   isValidUsfm,
   excludeUSXs,
   findAllMarkers,
+  customMarkersExt,
 } = require("./config");
 const {USFMParser, Filter} = require("../src/index");
 
@@ -99,7 +100,7 @@ describe("Test USFM-USX-USFM roundtripping", () => {
         const usx = cached.usx;
         assert(usx.nodeType === 1);
 
-        const testParser2 = new USFMParser(null, null, usx);
+        const testParser2 = new USFMParser(null, null, usx, null, null, customMarkersExt);
         const generatedUSFM = testParser2.usfm.trim();
         assert.strictEqual(typeof generatedUSFM, "string");
         assert(generatedUSFM.startsWith("\\id"));

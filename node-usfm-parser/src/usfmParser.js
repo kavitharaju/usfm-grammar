@@ -6,6 +6,7 @@ const { USJGenerator } = require('./usjGenerator');
 const { ListGenerator } = require('./listGenerator');
 const { USXGenerator } = require('./usxGenerator');
 const { Filter } = require('./filters.js');
+const ExtensionReader = require('./markersExtReader.js');
 const { ORIGINAL_VREF } = require('./utils/vrefs');
 const USFM3 = require('tree-sitter-usfm3');
 const { Query } = Parser;
@@ -17,10 +18,12 @@ class USFMParser {
     fromUsx = null,
     fromBibleNlp = null,
     bookCode = null,
+    markersExt = null,
   ) {
     this.syntaxTree = null;
     this.errors = [];
     this.warnings = [];
+    this.markerExtensions = null;
 
     let inputsGiven = 0;
     if (usfmString !== null) {
@@ -65,6 +68,14 @@ Only one of USFM, USJ, USX or BibleNLP is supported in one object.`);
     } else if (fromBibleNlp !== null) {
       this.bibleNlp = fromBibleNlp;
       this.usfm = this.convertBibleNLPtoUSFM(bookCode);
+    }
+
+    if (markersExt !== null) {
+      this.markerExtensions = new ExtensionReader();
+      this.markerExtensions.readToObject(markersExt);
+      if (Object.keys(this.markerExtensions.extensions).length > 0) {
+        this.usfm = this.markerExtensions.replaceCustomMarkers(this.usfm);
+      }
     }
     this.parser = null;
     this.initializeParser();
@@ -183,16 +194,29 @@ Refer docs: https://docs.usfm.bible/usfm/3.1.2/syntax.html#_usx_usfm_xml`,
   }
 
   checkforMissing(node) {
-    for (const n of node.children) {
-      if (n.isMissing) {
+    const cursor = node.walk();
+
+    do {
+      const currentNode = cursor.currentNode;
+
+      if (currentNode.isMissing) {
         this.errors.push(
-          `At ${n.startPosition.row + 1}:${
-            n.startPosition.column
-          }, Error: Missing ${n.type}`,
+          `At ${currentNode.startPosition.row + 1}:${
+            currentNode.startPosition.column
+          }, Error: Missing ${currentNode.type}`,
         );
       }
-      this.checkforMissing(n);
-    }
+
+      if (cursor.gotoFirstChild()) {
+        continue;
+      }
+
+      while (!cursor.gotoNextSibling()) {
+        if (!cursor.gotoParent()) {
+          return;
+        }
+      }
+    } while (true);
   }
 
   convertUSJToUSFM() {

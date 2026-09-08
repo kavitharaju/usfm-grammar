@@ -1,6 +1,6 @@
 const assert = require('assert');
 const fs = require('node:fs');
-const {allUsfmFiles, initialiseParser, isValidUsfm, excludeUSJs, findAllMarkers} = require('./config');
+const {allUsfmFiles, initialiseParser, isValidUsfm, excludeUSJs, findAllMarkers, customMarkersExt} = require('./config');
 const {USFMParser, Filter} = require("../src/index");
 
 
@@ -98,7 +98,7 @@ describe("Test USJ to BibleNLP format conversion", () => {
         //Tests if input parses without errors
         const rawData = fs.readFileSync(filePath, 'utf8');
         const usj = JSON.parse(rawData)
-        const testParser = new USFMParser(null, usj);
+        const testParser = new USFMParser(null, usj, null, null, null, customMarkersExt);
         assert(testParser instanceof USFMParser)
         const json = testParser.toBibleNlpFormat();
         assert("text" in json);
@@ -119,7 +119,7 @@ describe("Test generating USFM from BibleNLP format", () => {
         const testParser = initialiseParser(inputUsfmPath);
         const bibleNlpObj = testParser.toBibleNlpFormat();
         if (bibleNlpObj['vref'].length > 0) {
-          const bnlpParser = new USFMParser(null, null, null, bibleNlpObj);
+          const bnlpParser = new USFMParser(null, null, null, bibleNlpObj, null, customMarkersExt);
           const newusfm = bnlpParser.usfm;
           assert(bnlpParser.errors.length === 0);
           assert(newusfm.includes("\\id"));

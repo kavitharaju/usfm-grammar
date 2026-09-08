@@ -8,6 +8,20 @@ let negativeTests = []
 
 const TEST_DIR = "../tests";
 
+const customMarkersExt = String.raw`
+\marker zaln-e
+\category milestone
+\description This is a custom milestone marker.
+
+\marker zaln-s
+\category milestone
+\description This is a custom milestone marker.
+
+\marker zms
+\category milestone
+\description This is a custom milestone marker.
+`;
+
 allUsfmFiles = allUsfmFiles.concat( glob.sync(TEST_DIR+'/*/*/origin.usfm'));
 allUsfmFiles = allUsfmFiles.concat( glob.sync(TEST_DIR+'/*/*/*/origin.usfm'));
 // console.log(allUsfmFiles)
@@ -131,7 +145,7 @@ const initialiseParser = function (inputUsfmPath){
     `Open and parse the given file`
     try {
       const data = fs.readFileSync(inputUsfmPath, 'utf8');
-      let testParser = new USFMParser(data);
+      let testParser = new USFMParser(data, null, null, null, null, customMarkersExt);
       if (testParser === null) {
         throw Error(`Paring failed for ${inputUsfmPath}: ${data}`)
       }
@@ -171,7 +185,7 @@ const checkValidUsfm = function (inputUsfmPath) {
 
 const findAllMarkers = function (usfmStr, keepId = false, keepNumber = true) {
   // Regex pattern to find all markers in the USFM string
-  let allMarkersInInput = [...usfmStr.matchAll(/\\\+?(([A-Za-z]+)\d*(-\d+)?(-[se])?)/g)];
+  let allMarkersInInput = [...usfmStr.matchAll(/\\\+?(([A-Za-z\_]+)\d*(-\d+)?(-[se])?)/g)];
 
   // Processing based on `keepNumber` flag
   if (keepNumber) {
@@ -207,6 +221,13 @@ const findAllMarkers = function (usfmStr, keepId = false, keepNumber = true) {
     allMarkersInInput.splice(vidIndex, 1);
   }
 
+  allMarkersInInput = allMarkersInInput.map(marker => {
+    if (marker.startsWith('custom')) {
+      return marker.split('_').slice(1).join('_');
+    }
+    return marker;
+  });
+
   return allMarkersInInput;
 }
 
@@ -226,5 +247,6 @@ module.exports = {
     isValidUsfm: isValidUsfm,
     excludeUSJs: excludeUSJs,
     excludeUSXs: excludeUSXs,
-    findAllMarkers: findAllMarkers
+    findAllMarkers: findAllMarkers,
+    customMarkersExt: customMarkersExt,
 };
