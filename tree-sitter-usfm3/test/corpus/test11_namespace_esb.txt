@@ -2,21 +2,21 @@
 znamespace
 ================================================================================
 \id GEN
-\zhead some text
+\customPara_zhead some text
 \c 1
-\z-empty
+\customPara_z-empty
 \p
-\z-extra Some text content which is not scripture \*
-\v 1 text \zinline inner text \zinline*
+\customMS_z-extra Some text content which is not scripture \*
+\v 1 text \customChar_zinline inner text \customChar_zinline*
 \v 2 text
-\v 3 text \zattrib inner text |x-key="val" \zattrib*
+\v 3 text \customChar_zattrib inner text |x-key="val" \customChar_zattrib*
 \v 4 text
 \rem test comment to chekc if para flow breaks
 \v 5 mote text
-\z-para check inner para
+\customPara_z-para check inner para
 \v 6 text
 \c 2
-\z-extra Some text content which is not scripture \*
+\customMS_z-extra Some text content which is not scripture \*
 \p scripture continues
 --------------------------------------------------------------------------------
 
@@ -25,23 +25,19 @@ znamespace
     (id
       (bookcode)
       (description)))
-  (zNameSpace
-    (zSpaceTag)
+  (zNameSpacePara
+    (zSpaceTagPara)
     (text))
   (chapter
     (c
       (chapterNumber))
+    (zNameSpacePara
+      (zSpaceTagPara)
+      (text))
     (paragraph
       (p
-        (zNameSpace
-          (zSpaceTag)
-          (text))
-        (v
-          (verseNumber))
-        (verseText
-          (text))
-        (zNameSpace
-          (zSpaceTag)
+        (zNameSpaceMS
+          (zSpaceTagMilestone)
           (text))
         (verseText
           (text))
@@ -49,20 +45,54 @@ znamespace
           (verseNumber))
         (verseText
           (text))
+        (zNameSpaceChar
+          (zSpaceTagChar)
+          (text)
+          (zSpaceCloseChar))
+        (verseText
+          (text))
         (v
           (verseNumber))
         (verseText
           (text))
-        (zNameSpace
-          (zSpaceTag)
+        (v
+          (verseNumber))
+        (verseText
+          (text))
+        (zNameSpaceChar
+          (zSpaceTagChar)
           (text)
           (customAttribute
             (customAttributeName)
-            (attributeValue)))
+            (attributeValue))
+          (zSpaceCloseChar))
         (verseText
           (text))
         (v
           (verseNumber))
+        (verseText
+          (text))
+        (rem
+          (text))
+        (v
+          (verseNumber))
+        (verseText
+          (text))
+        (zNameSpacePara
+          (zSpaceTagPara)
+          (text))
+        (v
+          (verseNumber))
+        (verseText
+          (text)))))
+  (chapter
+    (c
+      (chapterNumber))
+    (zNameSpaceMS
+      (zSpaceTagMilestone)
+      (text))
+    (paragraph
+      (p
         (verseText
           (text))))))
 
