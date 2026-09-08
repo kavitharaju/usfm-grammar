@@ -455,6 +455,40 @@ class USJGenerator:
                 self.node_2_usj(child, ref_json_obj)
             parent_json_obj["content"].append(ref_json_obj)
 
+    def _node_2_usj_custom(self, node, parent_json_obj):
+        """Convert user extension nodes starting with z to USJ of appropriate type"""
+        match node.type:
+            case "zNameSpacePara":
+                node_type = "para"
+            case "zNameSpaceChar":
+                node_type = "char"
+            case "zNameSpaceNote":
+                node_type = "note"
+            case "zNameSpaceMS":
+                node_type = "ms"
+            case _ :
+                self.warnings.append(f"Unknown custom node type: {node.type}")
+                return
+        custom_json_obj = {"type": node_type}
+        for child in node.children:
+            if child.type.startswith("zSpaceTag"):
+                marker_name = self.usfm[child.start_byte : child.end_byte].decode("utf-8").strip()
+                marker_name = "_".join(marker_name.split("_")[1:])  # Remove the customType_ prefix
+                custom_json_obj["marker"] = marker_name
+            elif child.type.endswith("Attribute"):
+                self.node_2_usj(child, custom_json_obj)
+            elif child.type.startswith("zSpaceClose"):
+                closed_marker_name = self.usfm[child.start_byte : child.end_byte].decode("utf-8").strip()
+                closed_marker_name = "_".join(closed_marker_name.split("_")[1:])
+                if closed_marker_name != custom_json_obj["marker"]:
+                    self.warnings.append(f"Custom node closed with a different marker: {closed_marker_name} instead of {custom_json_obj['marker']}")
+            else:
+                if "content" not in custom_json_obj:
+                    custom_json_obj["content"] = []
+                self.node_2_usj(child, custom_json_obj)
+        parent_json_obj["content"].append(custom_json_obj)
+                
+
     def _node_2_usj_generic(self, node, parent_json_obj):
         """Convert generic nodes to USJ format"""
         tag_node = node.children[0] if len(node.children) > 0 else node
@@ -528,11 +562,11 @@ class USJGenerator:
         dispatch_map["usfm"] = lambda *_: None  # noop
 
         # Add handlers for different marker types
-        add_handlers(["paragraph", "q", "w"], self._node_2_usj_para)
+        add_handlers(["paragraph"], self._node_2_usj_para)
         add_handlers(["cl", "cp", "vp"], self._node_2_usj_generic)
         add_handlers(["ca", "va"], self._node_2_usj_ca_va)
         add_handlers(["table", "tr"], self._node_2_usj_table)
-        add_handlers(["milestone", "zNameSpace"], self._node_2_usj_milestone)
+        add_handlers(["milestone"], self._node_2_usj_milestone)
         add_handlers(["esb", "cat", "fig", "ref"], self._node_2_usj_special)
         add_handlers(USJGenerator.MARKER_LISTS["note"], self._node_2_usj_notes)
         add_handlers(
@@ -542,6 +576,7 @@ class USJGenerator:
             self._node_2_usj_char,
         )
         add_handlers(USJGenerator.MARKER_LISTS["table_cell"], self._node_2_usj_table)
+        add_handlers(["zNameSpacePara", "zNameSpaceChar", "zNameSpaceNote", "zNameSpaceMS"], self._node_2_usj_custom)
 
         # Add paragraph style markers
         for marker in USJGenerator.MARKER_LISTS["para_style"]:

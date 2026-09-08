@@ -7,36 +7,57 @@ from src.usfm_grammar import USFMParser, Filter
 
 TEST_DIR = "../tests"
 
+custom_markers_ext = """
+\\marker zaln-e
+\\category milestone
+\\description This is a custom milestone marker.
+
+\\marker zaln-s
+\\category milestone
+\\description This is a custom milestone marker.
+
+\\marker zms
+\\category milestone
+\\description This is a custom milestone marker.
+
+"""
+
 
 def initialise_parser(input_usfm_path):
     """Open and parse the given file"""
     with open(input_usfm_path, "r", encoding="utf-8") as usfm_file:
         usfm_string = usfm_file.read()
-    test_parser = USFMParser(usfm_string)
+    user_extensions = input_usfm_path.replace("origin.usfm", "markers.ext")
+    # if glob(user_extensions):
+    #     with open(user_extensions, "r", encoding="utf-8") as ext_file:
+    #         markers_ext = ext_file.read()
+    # else:
+    #     markers_ext = None
+    test_parser = USFMParser(usfm_string, markers_ext=custom_markers_ext)
     return test_parser
 
 
 def generate_USFM_from_USJ(input_usj):
     """Create a generator, and use usj_to_usfm convertion API"""
-    usj_parser = USFMParser(from_usj=input_usj)
+    usj_parser = USFMParser(from_usj=input_usj, markers_ext=custom_markers_ext)
     return usj_parser.usfm
 
 
 def generate_USFM_from_USX(input_usx):
     """Create a generator, and use usj_to_usfm convertion API"""
-    usx_parser = USFMParser(from_usx=input_usx)
+    usx_parser = USFMParser(from_usx=input_usx, markers_ext=custom_markers_ext)
     return usx_parser.usfm
 
 
 def generate_USFM_from_BibleNlp(input_biblenlp):
     """Create a generator, and use biblenlp_to_usfm convertion API"""
-    usx_parser = USFMParser(from_biblenlp=input_biblenlp)
+    usx_parser = USFMParser(from_biblenlp=input_biblenlp, markers_ext=custom_markers_ext)
     return usx_parser.usfm
 
 
 def parse_USFM_string(usfm_string):
     """Set up a parser obj with given string input"""
-    test_parser = USFMParser(usfm_string)
+    test_parser = USFMParser(usfm_string, markers_ext=custom_markers_ext)
     return test_parser
 
 
@@ -83,6 +104,11 @@ def find_all_markers(usfm_path, keep_id=False, keep_number=True):
         all_markers_in_input.remove("usfm")
     if "vid" in all_markers_in_input:
         all_markers_in_input.remove("vid")
+    # for marker in all_markers_in_input:
+    #     if marker.startswith("custom"):
+    #         all_markers_in_input.remove(marker)
+    #         split_marker = "_".join(marker.split("_")[1:])
+    #         all_markers_in_input.append(split_marker)
     return all_markers_in_input
 
 

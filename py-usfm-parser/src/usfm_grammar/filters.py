@@ -71,7 +71,7 @@ def exclude_markers_in_usj(
     if this_marker in exclude_markers:
         this_marker_needed = False
         excluded_parent = True
-        if this_marker in MARKERS_WITH_DISCARDABLE_CONTENTS:
+        if this_marker in MARKERS_WITH_DISCARDABLE_CONTENTS or this_marker.startswith("z"):
             inner_content_needed = False
     if (this_marker_needed or inner_content_needed) and "content" in input_usj:
         for item in input_usj["content"]:
@@ -116,7 +116,7 @@ def include_markers_in_usj(
     if this_marker not in include_markers + [""]:
         this_marker_needed = False
         excluded_parent = True
-        if this_marker in MARKERS_WITH_DISCARDABLE_CONTENTS:
+        if this_marker in MARKERS_WITH_DISCARDABLE_CONTENTS or this_marker.startswith("z"):
             inner_content_needed = False
     if (this_marker_needed or inner_content_needed) and "content" in input_usj:
         for item in input_usj["content"]:

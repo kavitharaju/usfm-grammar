@@ -12,6 +12,7 @@ from usfm_grammar.list_generator import ListGenerator
 from usfm_grammar.usfm_generator import USFMGenerator
 from usfm_grammar.filters import exclude_markers_in_usj, include_markers_in_usj
 from usfm_grammar.errors import USFMGrammarError, ParsingError, ParameterError
+from usfm_grammar.markers_ext_reader import ExtensionReader
 
 class Filter(list, Enum):
     """Defines the values of filter options"""
@@ -98,12 +99,14 @@ class USFMParser:
         from_usx: etree.Element = None,
         from_biblenlp: dict = None,
         book_code: str = None,
+        markers_ext: str = None
     ):
         # super(USFMParser, self).__init__()
         self.usfm_bytes = None
         self.syntax_tree = None
         self.errors = []
         self.warnings = []
+        self.marker_extensions = None
 
         inputs_given = 0
         if usfm_string is not None:
@@ -144,6 +147,12 @@ class USFMParser:
             biblenlp_converter.biblenlp_to_usfm(from_biblenlp, book_code)
             self.usfm = biblenlp_converter.usfm_string
             self.warnings.extend(biblenlp_converter.warnings)
+
+        if markers_ext is not None:
+            self.marker_extensions = ExtensionReader()
+            self.marker_extensions.read_to_object(markers_ext)
+            if len(self.marker_extensions.extensions) > 0:
+                self.usfm = self.marker_extensions.replace_custom_markers(self.usfm)
 
         # Some basic sanity checks
         lower_case_book_code = re.compile(r"^\\id ([a-z0-9][a-z][a-z])")

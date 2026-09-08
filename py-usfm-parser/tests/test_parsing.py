@@ -56,10 +56,16 @@ def test_all_markers_are_in_output(file_path):
 
     all_nodes_in_st = get_nodes(test_parser.syntax_tree)
     for marker in all_markers_in_input:
-        if marker.startswith("z"):
-            marker = "zNameSpace"
-        elif marker in ["list-s", "list-e"]:
+        if marker in ["list-s", "list-e"]:
             marker = marker.replace("-", "_")
+        elif marker.startswith("z"):
+            found = False
+            for node in all_nodes_in_st:
+                if node.startswith("zNameSpace"):
+                    found = True
+                    break
+            assert found, marker
+            continue
         elif (
             marker in ["qte", "qts", "ts"]
             or marker.endswith("-e")

@@ -4,7 +4,7 @@ import json, os
 import pytest
 import re
 
-from tests import all_usfm_files, initialise_parser, negative_tests
+from tests import all_usfm_files, initialise_parser, negative_tests, custom_markers_ext
 from tests import parse_USFM_string, generate_USFM_from_BibleNlp
 from src.usfm_grammar import Filter, USFMParser
 
@@ -51,10 +51,14 @@ def test_list_converions_with_include_markers(file_path, include_markers):
     assert not test_parser.errors, test_parser.errors
     usfm_list = test_parser.to_list(include_markers=include_markers)
     assert isinstance(usfm_list, list)
+    table_view = "\n".join(
+        "\t".join(str(cell).replace("\n", " ") for cell in row)
+        for row in usfm_list
+    )
     for row in usfm_list[1:]:
         marker = row[5]
         marker = re.sub(trailing_num_pattern, "", marker)
-        assert marker in include_markers
+        assert marker in include_markers, f"{marker} not in {include_markers}\n{table_view}"
 
 
 @pytest.mark.parametrize("file_path", test_files)
@@ -81,7 +85,7 @@ def test_usj_to_biblenlp_conversion(file_path):
     ):
         with open(usj_path, "r", encoding="utf-8") as usj_fp:
             usj = json.load(usj_fp)
-            test_parser = USFMParser(from_usj=usj)
+            test_parser = USFMParser(from_usj=usj, markers_ext=custom_markers_ext)
             assert not test_parser.errors, test_parser.errors
             bible_nlp_dict = test_parser.to_biblenlp_format()
             assert isinstance(bible_nlp_dict, dict)

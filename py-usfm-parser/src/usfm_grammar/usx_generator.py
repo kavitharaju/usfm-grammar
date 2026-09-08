@@ -490,6 +490,37 @@ class USXGenerator:
             for child in node.children[1:-1]:
                 self.node_2_usx(child, ref_xml_node)
 
+    def _node_2_usx_custom(self, node, parent_xml_node):
+        """Convert user extension nodes starting with z to USJ of appropriate type"""
+        match node.type:
+            case "zNameSpacePara":
+                node_type = "para"
+            case "zNameSpaceChar":
+                node_type = "char"
+            case "zNameSpaceNote":
+                node_type = "note"
+            case "zNameSpaceMS":
+                node_type = "ms"
+            case _ :
+                self.warnings.append(f"Unknown custom node type: {node.type}")
+                return
+        custom_xml_node = etree.SubElement(parent_xml_node, node_type)
+        for child in node.children:
+            if child.type.startswith("zSpaceTag"):
+                marker_name = self.usfm[child.start_byte : child.end_byte].decode("utf-8").strip()
+                marker_name = "_".join(marker_name.split("_")[1:])  # Remove the customType_ prefix
+                custom_xml_node.set("style", marker_name)
+            elif child.type.endswith("Attribute"):
+                self.node_2_usx(child, custom_xml_node)
+            elif child.type.startswith("zSpaceClose"):
+                closed_marker_name = self.usfm[child.start_byte : child.end_byte].decode("utf-8").strip()
+                closed_marker_name = "_".join(closed_marker_name.split("_")[1:])
+                if closed_marker_name != custom_xml_node.get("marker"):
+                    self.warnings.append(f"Custom node closed with a different marker: {closed_marker_name} instead of {custom_xml_node.get('marker')}")
+            else:
+                self.node_2_usx(child, custom_xml_node)
+
+
     def _node_2_usx_generic(self, node, parent_xml_node):
         """build nodes for para style markers in USX"""
         tag_node = node.children[0] if len(node.children) > 0 else node
@@ -551,7 +582,7 @@ class USXGenerator:
         add_handlers(["cl", "cp", "vp"], self._node_2_usx_generic)
         add_handlers(["ca", "va"], self._node_2_usx_ca_va)
         add_handlers(["table", "tr"], self._node_2_usx_table)
-        add_handlers(["milestone", "zNameSpace"], self._node_2_usx_milestone)
+        add_handlers(["milestone"], self._node_2_usx_milestone)
         add_handlers(["esb", "cat", "fig", "ref"], self._node_2_usx_special)
         add_handlers(self.NOTE_MARKERS, self._node_2_usx_notes)
         add_handlers(
@@ -561,6 +592,7 @@ class USXGenerator:
             self._node_2_usx_char,
         )
         add_handlers(self.TABLE_CELL_MARKERS, self._node_2_usx_table)
+        add_handlers(["zNameSpacePara", "zNameSpaceChar", "zNameSpaceMS", "zNameSpaceNote"], self._node_2_usx_custom)
 
         # Add paragraph style markers
         for marker in self.PARA_STYLE_MARKERS:
