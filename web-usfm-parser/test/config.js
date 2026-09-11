@@ -143,7 +143,7 @@ const initialiseParser = async function (inputUsfmPath) {
   `Open and parse the given file`;
   try {
     const data = fs.readFileSync(inputUsfmPath, "utf8");
-    let testParser = new USFMParser(data, null, null, null, null, customMarkersExt);
+    let testParser = new USFMParser(data);
     if (testParser === null) {
       throw Error(`Paring failed for ${inputUsfmPath}: ${data}`);
     }

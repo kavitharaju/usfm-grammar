@@ -1,5 +1,5 @@
 import assert from 'assert';
-import {allUsfmFiles, initialiseParser, isValidUsfm, customMarkersExt} from './config.js';
+import {allUsfmFiles, initialiseParser, isValidUsfm} from './config.js';
 import {USFMParser} from '../src/index.js';
 
 describe("Check parsing pass or fail is correct", () => {
