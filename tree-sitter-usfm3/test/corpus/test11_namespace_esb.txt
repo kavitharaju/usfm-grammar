@@ -3,20 +3,24 @@ znamespace
 ================================================================================
 \id GEN
 \customPara_zhead some text
+\zhead some text
 \c 1
 \customPara_z-empty
+\z-empty
 \p
 \customMS_z-extra Some text content which is not scripture \*
 \v 1 text \customChar_zinline inner text \customChar_zinline*
+\zinline inner text \zinline*
 \v 2 text
 \v 3 text \customChar_zattrib inner text |x-key="val" \customChar_zattrib*
-\v 4 text
+\v 4 text \zattrib inner text |x-key="val" \zattrib*
 \rem test comment to chekc if para flow breaks
 \v 5 mote text
 \customPara_z-para check inner para
 \v 6 text
 \c 2
 \customMS_z-extra Some text content which is not scripture \*
+\z-milestone |x-attrib="value"\*
 \p scripture continues
 --------------------------------------------------------------------------------
 
@@ -28,12 +32,20 @@ znamespace
   (zNameSpacePara
     (zSpaceTagPara)
     (text))
+  (zNameSpaceUndefined
+    (zNameSpaceRegular
+      (zSpaceTagGeneric)
+      (text)))
   (chapter
     (c
       (chapterNumber))
     (zNameSpacePara
       (zSpaceTagPara)
       (text))
+    (zNameSpaceUndefined
+      (zNameSpaceRegular
+        (zSpaceTagGeneric)
+        (text)))
     (paragraph
       (p
         (zNameSpaceMS
@@ -49,6 +61,13 @@ znamespace
           (zSpaceTagChar)
           (text)
           (zSpaceCloseChar))
+        (verseText
+          (text))
+        (zNameSpaceUndefined
+          (zNameSpaceClosed
+            (zSpaceTagGeneric)
+            (text)
+            (zSpaceCloseGeneric)))
         (verseText
           (text))
         (v
@@ -72,6 +91,16 @@ znamespace
           (verseNumber))
         (verseText
           (text))
+        (zNameSpaceUndefined
+          (zNameSpaceClosed
+            (zSpaceTagGeneric)
+            (text)
+            (customAttribute
+              (customAttributeName)
+              (attributeValue))
+            (zSpaceCloseGeneric)))
+        (verseText
+          (text))
         (rem
           (text))
         (v
@@ -91,6 +120,13 @@ znamespace
     (zNameSpaceMS
       (zSpaceTagMilestone)
       (text))
+    (zNameSpaceUndefined
+      (zNameSpaceClosed
+        (zSpaceTagGeneric)
+        (text)
+        (customAttribute
+          (customAttributeName)
+          (attributeValue))))
     (paragraph
       (p
         (verseText
