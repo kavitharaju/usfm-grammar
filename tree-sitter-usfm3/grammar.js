@@ -663,14 +663,24 @@ module.exports = grammar({
     zSpaceCloseChar: $=> /\\customChar_z[\w\-]+\*/,
     zSpaceTagMilestone: $=> /\\customMS_z[\w\-]+/,
 
+    zSpaceTagGeneric: $=> /\\z[\w\-]+/,
+    zSpaceCloseGeneric: $=> /\\z[\w\-]+\*/,
+    zNameSpaceRegular: $ => prec.right(0, seq($.zSpaceTagGeneric, optional($.text))),
+    zNameSpaceClosed: $ => prec.right(0, seq($.zSpaceTagGeneric, optional($.text),
+      choice(optional($._milestoneAttributes), repeat(choice($.zNameSpaceChar,$.zNameSpaceClosed))),
+      choice($.zSpaceCloseGeneric, "\\*"))), // This may not support one name space within another
+    // zNameSpaceStandaloneMarker: $ => seq($.zSpaceTagGeneric, optional($.text),
+    //   optional($._milestoneAttributes), "\\*" ),
+    zNameSpaceUndefined: $ => choice($.zNameSpaceClosed, $.zNameSpaceRegular),
+
     zNameSpacePara: $ => prec.right(0, seq($.zSpaceTagPara, optional($.text))),
     zNameSpaceChar: $ => prec.right(0, seq($.zSpaceTagChar, optional($.text),
       optional($._milestoneAttributes), $.zSpaceCloseChar)), // This does not support one name space within another
     zNameSpaceMS: $ => seq($.zSpaceTagMilestone, optional($.text),
       optional($._milestoneAttributes), "\\*" ),
-    zNameSpaceNote: $=> prec.right(0, seq($.zNameSpaceNote, $.caller, //repeat(choice($._footnoteContents, $._crossrefContents, $.zNameSpaceChar)), $.zSpaceCloseNote)),
-      repeat($.zNameSpaceChar), $.zNameSpaceNote)),
-    _zNameSpace: $ => choice($.zNameSpacePara, $.zNameSpaceChar, $.zNameSpaceMS, $.zNameSpaceNote),
+    zNameSpaceNote: $=> prec.right(0, seq($.zSpaceTagNote, $.caller, //repeat(choice($._footnoteContents, $._crossrefContents, $.zNameSpaceChar)), $.zSpaceCloseNote)),
+      repeat(choice($.zNameSpaceChar, $.zNameSpaceClosed)), $.zSpaceCloseNote)),
+    _zNameSpace: $ => choice($.zNameSpacePara, $.zNameSpaceChar, $.zNameSpaceMS, $.zNameSpaceNote, $.zNameSpaceUndefined),
     
     esb: $ => seq("\\esb",  repeat($._esbContents), "\\esbe"),
     _esbContents: $ => choice( 
