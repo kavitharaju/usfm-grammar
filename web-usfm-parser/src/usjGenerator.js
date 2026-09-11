@@ -16,6 +16,7 @@ class USJGenerator {
     this.usfmLanguage = treeSitterLanguageObj;
     this.usfm = usfmString;
     this.warnings = []; // Initialize warnings array to store any warnings during processing
+    this.errors = [];
 
     this.jsonRootObj = usjRootObj || {
       type: 'USJ',
@@ -491,27 +492,44 @@ class USJGenerator {
       zNameSpaceChar: 'char',
       zNameSpaceNote: 'note',
       zNameSpaceMS: 'ms',
+      zNameSpaceRegular: 'para',
+      zNameSpaceClosed: 'ms',
     };
-    const nodeType = nodeTypeMap[node.type];
+    let currNode = node;
+    let nodeType = null;
+    if (node.type === 'zNameSpaceUndefined' && node.children.length > 0 ) {
+      currNode = node.children[0];
+      const lastIndex = currNode.children.length;
+      if (currNode.children[lastIndex - 1].type.startsWith('zSpaceClose')) {
+        nodeType = 'char';
+      }
+    }
+    if (nodeType === null) { nodeType = nodeTypeMap[currNode.type]; }
     if (nodeType === undefined) {
-      this.warnings.push(`Unknown custom node type: ${node.type}`);
+      this.errors.push(`Unknown custom node type: ${currNode.type}`);
       return;
     }
-
     const customJsonObj = { type: nodeType };
-    for (const child of node.children) {
+    for (const child of currNode.children) {
       if (child.type.startsWith('zSpaceTag')) {
         const marker = this.usfm
           .slice(child.startIndex, child.endIndex)
-          .trim();
-        customJsonObj.marker = marker.split('_').slice(1).join('_');
+          .trim()
+          .replace('\\', '');
+        if (marker.includes('custom')) {
+          customJsonObj.marker = marker.split('_').slice(1).join('_');
+        } else { customJsonObj.marker = marker; }
       } else if (child.type.endsWith('Attribute')) {
         this.nodeToUSJ(child, customJsonObj);
       } else if (child.type.startsWith('zSpaceClose')) {
         const closeMarker = this.usfm
           .slice(child.startIndex, child.endIndex)
-          .trim();
-        const closedMarker = closeMarker.split('_').slice(1).join('_');
+          .trim()
+          .replace('\\', '');
+        let closedMarker = closeMarker;
+        if (closedMarker.includes('custom')) {
+          closedMarker = closeMarker.split('_').slice(1).join('_');
+        }
         if (closedMarker !== customJsonObj.marker) {
           this.warnings.push(
             `Custom node closed with a different marker: ${closedMarker} ` +
@@ -605,8 +623,8 @@ class USJGenerator {
     addHandlers(['table', 'tr'], this.nodeToUSJTable);
     addHandlers(['milestone'], this.nodeToUSJMilestone);
     addHandlers(
-      ['zNameSpacePara', 'zNameSpaceChar', 'zNameSpaceNote', 'zNameSpaceMS'],
-      this.nodeToUSJCustom,
+      ['zNameSpacePara', 'zNameSpaceChar', 'zNameSpaceNote', 'zNameSpaceMS',
+        'zNameSpaceUndefined'], this.nodeToUSJCustom,
     );
     addHandlers(['esb', 'cat', 'fig', 'ref'], this.nodeToUSJSpecial);
     addHandlers(NOTE_MARKERS, this.nodeToUSJNotes);

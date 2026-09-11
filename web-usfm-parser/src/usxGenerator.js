@@ -25,6 +25,7 @@ class USXGenerator {
     this.usfmLanguage = treeSitterLanguageObj;
     this.usfm = usfmString;
     this.warnings = []; // Initialize warnings array to store any warnings during processing
+    this.errors = [];
 
     const domImpl = new DOMImplementation();
     const doc = domImpl.createDocument(null, 'usx', null);
@@ -81,8 +82,8 @@ class USXGenerator {
     addHandlers(['table', 'tr'], this.node2UsxTable);
     addHandlers(['milestone'], this.node2UsxMilestone);
     addHandlers(
-      ['zNameSpacePara', 'zNameSpaceChar', 'zNameSpaceNote', 'zNameSpaceMS'],
-      this.node2UsxCustom,
+      ['zNameSpacePara', 'zNameSpaceChar', 'zNameSpaceNote', 'zNameSpaceMS',
+        'zNameSpaceUndefined'], this.node2UsxCustom,
     );
     addHandlers(['esb', 'cat', 'fig', 'ref'], this.node2UsxSpecial);
     addHandlers(NOTE_MARKERS, this.node2UsxNotes);
@@ -586,30 +587,49 @@ class USXGenerator {
       zNameSpaceChar: 'char',
       zNameSpaceNote: 'note',
       zNameSpaceMS: 'ms',
+      zNameSpaceRegular: 'para',
+      zNameSpaceClosed: 'ms',
     };
-    const nodeType = nodeTypeMap[node.type];
+    let currNode = node;
+    let nodeType = null;
+    if (node.type === 'zNameSpaceUndefined' && node.children.length > 0 ) {
+      currNode = node.children[0];
+      const lastIndex = currNode.children.length;
+      if (currNode.children[lastIndex - 1].type.startsWith('zSpaceClose')) {
+        nodeType = 'char';
+      }
+    }
+    if (nodeType === null) { nodeType = nodeTypeMap[currNode.type]; }
     if (nodeType === undefined) {
-      this.warnings.push(`Unknown custom node type: ${node.type}`);
+      this.errors.push(`Unknown custom node type: ${node.type}`);
       return;
     }
 
     const customXmlNode = parentXmlNode.ownerDocument.createElement(nodeType);
-    for (const child of node.children) {
+    for (const child of currNode.children) {
       if (child.type.startsWith('zSpaceTag')) {
-        const marker = this.usfm
+        let marker = this.usfm
           .slice(child.startIndex, child.endIndex)
-          .trim();
+          .trim()
+          .replace('\\', '');
+        if (marker.includes('custom')) {
+          marker = marker.split('_').slice(1).join('_');
+        }
         customXmlNode.setAttribute(
           'style',
-          marker.split('_').slice(1).join('_'),
+          marker,
         );
       } else if (child.type.endsWith('Attribute')) {
         this.node2Usx(child, customXmlNode);
       } else if (child.type.startsWith('zSpaceClose')) {
         const closeMarker = this.usfm
           .slice(child.startIndex, child.endIndex)
-          .trim();
-        const closedMarker = closeMarker.split('_').slice(1).join('_');
+          .trim()
+          .replace('\\', '');
+        let closedMarker = closeMarker;
+        if (closeMarker.includes('custom')) {
+          closedMarker = closeMarker.split('_').slice(1).join('_');
+        }
         if (closedMarker !== customXmlNode.getAttribute('style')) {
           this.warnings.push(
             `Custom node closed with a different marker: ${closedMarker} ` +
